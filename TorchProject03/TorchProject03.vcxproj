@@ -24,13 +24,13 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <CharacterSet>MultiByte</CharacterSet>
+    <CharacterSet>NotSet</CharacterSet>
     <PlatformToolset Condition="'$(VisualStudioVersion)' == '16.0'">v142</PlatformToolset>
     <PlatformToolset Condition="'$(VisualStudioVersion)' == '17.0'">v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <CharacterSet>MultiByte</CharacterSet>
+    <CharacterSet>NotSet</CharacterSet>
     <PlatformToolset Condition="'$(VisualStudioVersion)' == '16.0'">v142</PlatformToolset>
     <PlatformToolset Condition="'$(VisualStudioVersion)' == '17.0'">v143</PlatformToolset>
   </PropertyGroup>
@@ -58,7 +58,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\include;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\include\torch\csrc\api\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Work\Projects\vcpkg\installed\x64-windows\include;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\include;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\include\torch\csrc\api\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -102,8 +102,8 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd</Command>
     </PostBuildEvent>
     <Link>
-      <AdditionalDependencies>D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\caffe2_nvrtc.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\c10.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\c10_cuda.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\kineto.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch_cpu.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch_cuda.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch_cuda_cpp.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch_cuda_cu.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cublas.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cudart.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cudnn.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cufft.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\curand.lib;-INCLUDE:?warp_size@cuda@at@@YAHXZ;-INCLUDE:?_torch_cuda_cu_linker_symbol_op_cuda@native@at@@YA?AVTensor@2@AEBV32@@Z;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sndfile.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\caffe2_nvrtc.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\c10.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\c10_cuda.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\kineto.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch_cpu.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch_cuda.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch_cuda_cpp.lib;D:\Work\libtorch-win-shared-with-deps-debug-1.11.0+cu113\libtorch\lib\torch_cuda_cu.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cublas.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cudart.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cudnn.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cufft.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\curand.lib;-INCLUDE:?warp_size@cuda@at@@YAHXZ;-INCLUDE:?_torch_cuda_cu_linker_symbol_op_cuda@native@at@@YA?AVTensor@2@AEBV32@@Z;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>D:\Work\Projects\vcpkg\installed\x64-windows\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -117,7 +117,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\include;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\include\torch\csrc\api\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\Work\Projects\vcpkg\installed\x64-windows\include;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\include;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\include\torch\csrc\api\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <DisableSpecificWarnings>4267;4251;4522;4838;4305;4244;4190;4101;4996;4275</DisableSpecificWarnings>
@@ -161,8 +161,8 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd</Command>
     </PostBuildEvent>
     <Link>
-      <AdditionalDependencies>D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\caffe2_nvrtc.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\c10.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\c10_cuda.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\kineto.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch_cpu.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch_cuda.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch_cuda_cpp.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch_cuda_cu.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cublas.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cudart.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cudnn.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cufft.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\curand.lib;-INCLUDE:?warp_size@cuda@at@@YAHXZ;-INCLUDE:?_torch_cuda_cu_linker_symbol_op_cuda@native@at@@YA?AVTensor@2@AEBV32@@Z;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sndfile.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\caffe2_nvrtc.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\c10.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\c10_cuda.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\kineto.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch_cpu.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch_cuda.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch_cuda_cpp.lib;D:\Work\libtorch-win-shared-with-deps-1.11.0+cu113\libtorch\lib\torch_cuda_cu.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cublas.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cudart.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cudnn.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\cufft.lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\lib\x64\curand.lib;-INCLUDE:?warp_size@cuda@at@@YAHXZ;-INCLUDE:?_torch_cuda_cu_linker_symbol_op_cuda@native@at@@YA?AVTensor@2@AEBV32@@Z;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>D:\Work\Projects\vcpkg\installed\x64-windows\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -177,7 +177,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   <ItemGroup>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="example-app.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
