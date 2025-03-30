@@ -1,24 +1,23 @@
 ﻿#include <torch/torch.h>
 #include <filesystem>
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <vector>
 #include <random>
-#include <sndfile.hh>
 
 namespace fs = std::filesystem;
 
-const int SAMPLE_RATE = 16000; // Hz
-const int AUDIO_DURATION_SEC = 1;
-const int INPUT_SIZE = SAMPLE_RATE * AUDIO_DURATION_SEC;
-const int64_t MAX_NEGATIVES = 500; // ограничим число негативных примеров
+const int MFCC_DIM = 13; // 13 коэффициентов MFCC де-дельта-дельта
+const int64_t MAX_NEGATIVES = 500;
 
 struct NetImpl : torch::nn::Module {
     torch::nn::Linear fc1, fc2, fc3;
 
     NetImpl() :
-        fc1(INPUT_SIZE, 512),
-        fc2(512, 128),
-        fc3(128, 2) {
+        fc1(MFCC_DIM, 64),
+        fc2(64, 32),
+        fc3(32, 2) {
         register_module("fc1", fc1);
         register_module("fc2", fc2);
         register_module("fc3", fc3);
@@ -32,48 +31,65 @@ struct NetImpl : torch::nn::Module {
 };
 TORCH_MODULE(Net);
 
-// Загрузка и нормализация аудио
-torch::Tensor load_audio(const std::string& path) {
-    SndfileHandle file(path);
-    if (file.channels() != 1 || file.samplerate() != SAMPLE_RATE) {
-        throw std::runtime_error("Unsupported WAV format");
+// Загрузка и усреднение MFCC из .csv
+torch::Tensor load_mfcc_csv(const std::string& path) {
+    std::ifstream file(path);
+    std::string line;
+
+    // пропустить заголовок
+    std::getline(file, line);
+
+    std::vector<std::vector<float>> frames;
+    while (std::getline(file, line)) {
+        std::istringstream ss(line);
+        std::string token;
+        std::getline(ss, token, ';'); // frameIndex
+        std::getline(ss, token, ';'); // frameTime
+
+        std::vector<float> coeffs;
+        while (std::getline(ss, token, ';')) {
+            coeffs.push_back(std::stof(token));
+        }
+
+        if (coeffs.size() == MFCC_DIM)
+            frames.push_back(coeffs);
     }
 
-    std::vector<float> samples(file.frames());
-    file.readf(samples.data(), file.frames());
-
-    if (samples.size() < INPUT_SIZE)
-        samples.resize(INPUT_SIZE, 0.0f);
-    else if (samples.size() > INPUT_SIZE)
-        samples.resize(INPUT_SIZE);
-
-    // 🔽 Нормализация
-    for (auto& sample : samples) {
-        sample = std::clamp(sample / 32768.0f, -1.0f, 1.0f);
+    if (frames.empty()) {
+        throw std::runtime_error("Empty or invalid CSV: " + path);
     }
 
-    return torch::from_blob(samples.data(), { 1, INPUT_SIZE }, torch::kFloat32).clone();
+    torch::Tensor avg = torch::zeros({ MFCC_DIM });
+    for (const auto& frame : frames) {
+        for (int i = 0; i < MFCC_DIM; ++i) {
+            avg[i] += frame[i];
+        }
+    }
+    avg /= frames.size() + 0.0;
+    return avg.unsqueeze(0);  // [1, MFCC_DIM]
 }
 
-// Загрузка данных из директорий
+// Загрузка CSV-датасета
 void load_dataset(const std::string& positive_dir, const std::string& negative_dir,
     std::vector<torch::Tensor>& data, std::vector<int64_t>& labels) {
+
     int64_t neg_count = 0;
+
     auto load_from_dir = [&](const std::string& dir_path, int64_t label) {
         for (const auto& entry : fs::recursive_directory_iterator(dir_path)) {
             if (!entry.is_regular_file()) continue;
-            auto path = entry.path();
-            if (path.extension() != ".wav") continue;
+            if (entry.path().extension() != ".csv") continue;
 
             if (label == 0 && neg_count >= MAX_NEGATIVES) break;
 
             try {
-                data.push_back(load_audio(path.string()));
+                auto tensor = load_mfcc_csv(entry.path().string());
+                data.push_back(tensor);
                 labels.push_back(label);
                 if (label == 0) ++neg_count;
             }
             catch (const std::exception& e) {
-                std::cerr << "Ошибка при загрузке " << path << ": " << e.what() << "\n";
+                std::cerr << "Ошибка при загрузке " << entry.path() << ": " << e.what() << "\n";
             }
         }
         };
@@ -81,9 +97,9 @@ void load_dataset(const std::string& positive_dir, const std::string& negative_d
     load_from_dir(positive_dir, 1);
     load_from_dir(negative_dir, 0);
 
-    std::cout << "Данные загружены: " << data.size() << " примеров ("
-        << std::count(labels.begin(), labels.end(), 1) << " позитивных, "
-        << std::count(labels.begin(), labels.end(), 0) << " негативных)\n";
+    std::cout << "Загружено: " << data.size()
+        << " примеров (" << std::count(labels.begin(), labels.end(), 1)
+        << " позитивных, " << std::count(labels.begin(), labels.end(), 0) << " негативных)\n";
 }
 
 int main() {
@@ -91,12 +107,16 @@ int main() {
 
     std::vector<torch::Tensor> data;
     std::vector<int64_t> labels;
-    std::string path_yes = "D:\\Work\\media\\jarvis16000";
-    std::string path_no = "D:\\Work\\media\\speech_commands_v0.02 (1).tar\\speech_commands_v0.02 (1)";
+
+    //std::string path_yes = "D:\\Work\\mfcc\\yes"; // директория с позитивными CSV
+    //std::string path_no = "D:\\Work\\mfcc\\no";  // директория с негативными CSV
+
+    std::string path_yes = "D:\\Work\\media\\jarvis16000_mfcc";
+    std::string path_no = "D:\\Work\\media\\speech_commands_v0.02_mfcc";
+
 
     load_dataset(path_yes, path_no, data, labels);
 
-    // 🔀 Перемешивание
     std::vector<size_t> indices(data.size());
     std::iota(indices.begin(), indices.end(), 0);
     std::shuffle(indices.begin(), indices.end(), std::mt19937{ std::random_device{}() });
@@ -110,17 +130,29 @@ int main() {
 
 
 
-    // 🧪 Train/Validation Split
     size_t train_size = static_cast<size_t>(x_data.size() * 0.8);
-    auto x_train = torch::cat(std::vector<torch::Tensor>(x_data.begin(), x_data.begin() + train_size)).to(torch::kFloat32);
-    auto y_train = torch::tensor(std::vector<int64_t>(y_data.begin(), y_data.begin() + train_size), torch::kLong);
-    auto x_val = torch::cat(std::vector<torch::Tensor>(x_data.begin() + train_size, x_data.end())).to(torch::kFloat32);
-    auto y_val = torch::tensor(std::vector<int64_t>(y_data.begin() + train_size, y_data.end()), torch::kLong);
 
+    std::vector<torch::Tensor> x_train_vec(x_data.begin(), x_data.begin() + train_size);
+    auto x_train = torch::cat(x_train_vec).to(torch::kFloat32);
+
+    std::vector<torch::Tensor> x_val_vec(x_data.begin() + train_size, x_data.end());
+    auto x_val = torch::cat(x_val_vec).to(torch::kFloat32);
+
+    std::vector<int64_t> y_train_vec(y_data.begin(), y_data.begin() + train_size);
+    auto y_train = torch::tensor(y_train_vec, torch::kLong);
+
+    std::vector<int64_t> y_val_vec(y_data.begin() + train_size, y_data.end());
+    auto y_val = torch::tensor(y_val_vec, torch::kLong);
+    /*
+    auto x_train = torch::cat({ x_data.begin(), x_data.begin() + train_size }).to(torch::kFloat32);
+    auto y_train = torch::tensor({ y_data.begin(), y_data.begin() + train_size }, torch::kLong);
+    auto x_val = torch::cat({ x_data.begin() + train_size, x_data.end() }).to(torch::kFloat32);
+    auto y_val = torch::tensor({ y_data.begin() + train_size, y_data.end() }, torch::kLong);
+    */
     Net model;
-    torch::optim::Adam optimizer(model->parameters(), 0.0001); // 🔽 Learning Rate
+    torch::optim::Adam optimizer(model->parameters(), 0.0001);
 
-    const int epochs = 10;
+    const int epochs = 100;
     const int batch_size = 8;
 
     for (int epoch = 0; epoch < epochs; ++epoch) {
@@ -128,7 +160,7 @@ int main() {
         float total_loss = 0.0;
 
         for (size_t i = 0; i < x_train.size(0); i += batch_size) {
-            size_t end = std::min(int64_t(i + batch_size), x_train.size(0));
+            size_t end = std::min((int64_t)(i + batch_size), (int64_t)x_train.size(0));
             auto batch_x = x_train.slice(0, i, end);
             auto batch_y = y_train.slice(0, i, end);
 
@@ -141,7 +173,6 @@ int main() {
             total_loss += loss.item<float>();
         }
 
-        // 📊 Валидация
         model->eval();
         int correct = 0;
         for (int i = 0; i < x_val.size(0); ++i) {
@@ -150,26 +181,14 @@ int main() {
             auto pred = output.argmax(1).item<int>();
             if (pred == y_val[i].item<int>()) correct++;
         }
-        float acc = static_cast<float>(correct) / x_val.size(0);
 
+        float acc = static_cast<float>(correct) / x_val.size(0);
         std::cout << "Epoch [" << epoch + 1 << "/" << epochs << "] "
             << "- Train Loss: " << total_loss
             << ", Val Accuracy: " << acc * 100 << "%\n";
     }
 
-    int tp = 0, tn = 0, fp = 0, fn = 0;
-    for (int i = 0; i < x_val.size(0); ++i) {
-        auto output = model->forward(x_val[i].unsqueeze(0));
-        int pred = output.argmax(1).item<int>();
-        int label = y_val[i].item<int>();
-        if (label == 1 && pred == 1) tp++;
-        else if (label == 0 && pred == 0) tn++;
-        else if (label == 0 && pred == 1) fp++;
-        else if (label == 1 && pred == 0) fn++;
-    }
-    std::cout << "TP=" << tp << " FP=" << fp << " FN=" << fn << " TN=" << tn << "\n";
-
-    torch::save(model, "model.pt");
+    torch::save(model, "model_mfcc.pt");
     std::cout << "Model saved!\n";
 
     return 0;
