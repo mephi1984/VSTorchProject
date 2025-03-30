@@ -12,21 +12,31 @@ const int MFCC_DIM = 13; // 13 коэффициентов MFCC де-дельта
 const int64_t MAX_NEGATIVES = 500;
 
 struct NetImpl : torch::nn::Module {
-    torch::nn::Linear fc1, fc2, fc3;
+    torch::nn::Linear fc1, fc2, fc3, fc4;
+    torch::nn::Dropout dropout1, dropout2;
 
-    NetImpl() :
-        fc1(MFCC_DIM, 64),
-        fc2(64, 32),
-        fc3(32, 2) {
+    NetImpl()
+        : fc1(MFCC_DIM, 128),
+        fc2(128, 64),
+        fc3(64, 32),
+        fc4(32, 2),
+        dropout1(0.3),
+        dropout2(0.3) {
         register_module("fc1", fc1);
         register_module("fc2", fc2);
         register_module("fc3", fc3);
+        register_module("fc4", fc4);
+        register_module("dropout1", dropout1);
+        register_module("dropout2", dropout2);
     }
 
     torch::Tensor forward(torch::Tensor x) {
         x = torch::relu(fc1->forward(x));
+        x = dropout1->forward(x);
         x = torch::relu(fc2->forward(x));
-        return torch::log_softmax(fc3->forward(x), /*dim=*/1);
+        x = dropout2->forward(x);
+        x = torch::relu(fc3->forward(x));
+        return torch::log_softmax(fc4->forward(x), /*dim=*/1);
     }
 };
 TORCH_MODULE(Net);
@@ -102,6 +112,14 @@ void load_dataset(const std::string& positive_dir, const std::string& negative_d
         << " позитивных, " << std::count(labels.begin(), labels.end(), 0) << " негативных)\n";
 }
 
+// gamma = 2.0, alpha = class weight tensor
+torch::Tensor focal_loss(const torch::Tensor& input, const torch::Tensor& target, const torch::Tensor& alpha, float gamma = 2.0f) {
+    auto logpt = torch::nll_loss(input, target, alpha, torch::Reduction::None);
+    auto pt = torch::exp(-logpt);
+    auto loss = (1 - pt).pow(gamma) * logpt;
+    return loss.mean();
+}
+
 int main() {
     torch::manual_seed(777);
 
@@ -143,14 +161,13 @@ int main() {
 
     std::vector<int64_t> y_val_vec(y_data.begin() + train_size, y_data.end());
     auto y_val = torch::tensor(y_val_vec, torch::kLong);
-    /*
-    auto x_train = torch::cat({ x_data.begin(), x_data.begin() + train_size }).to(torch::kFloat32);
-    auto y_train = torch::tensor({ y_data.begin(), y_data.begin() + train_size }, torch::kLong);
-    auto x_val = torch::cat({ x_data.begin() + train_size, x_data.end() }).to(torch::kFloat32);
-    auto y_val = torch::tensor({ y_data.begin() + train_size, y_data.end() }, torch::kLong);
-    */
+    
     Net model;
     torch::optim::Adam optimizer(model->parameters(), 0.0001);
+
+
+    // Пример: "Привет" — вес 5.0, "Не Привет" — вес 1.0
+    torch::Tensor class_weights = torch::tensor({ 1.0, 5.0 }, torch::kFloat32);
 
     const int epochs = 100;
     const int batch_size = 8;
@@ -160,25 +177,24 @@ int main() {
         float total_loss = 0.0;
 
         for (size_t i = 0; i < x_train.size(0); i += batch_size) {
-            size_t end = std::min((int64_t)(i + batch_size), (int64_t)x_train.size(0));
+            size_t end = std::min(int64_t(i + batch_size), x_train.size(0));
             auto batch_x = x_train.slice(0, i, end);
             auto batch_y = y_train.slice(0, i, end);
 
             optimizer.zero_grad();
             auto output = model->forward(batch_x);
-            auto loss = torch::nll_loss(output, batch_y);
+            auto loss = focal_loss(output, batch_y, class_weights);
             loss.backward();
             optimizer.step();
 
             total_loss += loss.item<float>();
         }
 
+        // Валидация
         model->eval();
         int correct = 0;
         for (int i = 0; i < x_val.size(0); ++i) {
-            auto input = x_val[i];
-            auto output = model->forward(input.unsqueeze(0));
-            auto pred = output.argmax(1).item<int>();
+            auto pred = model->forward(x_val[i].unsqueeze(0)).argmax(1).item<int>();
             if (pred == y_val[i].item<int>()) correct++;
         }
 
