@@ -19,7 +19,9 @@ struct CnnNetImpl : torch::nn::Module {
         : conv1(torch::nn::Conv1dOptions(13, 32, 5).stride(1).padding(2)),  // [B, 13, T] → [B, 32, T]
         conv2(torch::nn::Conv1dOptions(32, 64, 3).stride(1).padding(1)), // [B, 64, T]
         fc1(64, 32),
-        fc2(32, 2) {
+        //fc2(32, 2)
+        fc2(32, 3)
+    {
         register_module("conv1", conv1);
         register_module("conv2", conv2);
         register_module("fc1", fc1);
@@ -80,17 +82,16 @@ torch::Tensor load_mfcc_csv(const std::string& path) {
 }
 
 // Загрузка CSV-датасета
-void load_dataset(const std::string& positive_dir, const std::string& negative_dir,
+void load_dataset(const std::string& path_privet, const std::string& path_vklyuchay, const std::string& path_noise,
     std::vector<torch::Tensor>& data, std::vector<int64_t>& labels) {
 
     int64_t neg_count = 0;
 
-    auto load_from_dir = [&](const std::string& dir_path, int64_t label) {
+    auto load_from_dir = [&](const std::string& dir_path, int64_t label, int64_t max_count = -1) {
         for (const auto& entry : fs::recursive_directory_iterator(dir_path)) {
             if (!entry.is_regular_file()) continue;
             if (entry.path().extension() != ".csv") continue;
-
-            if (label == 0 && neg_count >= MAX_NEGATIVES) break;
+            if (max_count > 0 && label == 0 && neg_count >= max_count) break;
 
             try {
                 auto tensor = load_mfcc_csv(entry.path().string());
@@ -104,12 +105,14 @@ void load_dataset(const std::string& positive_dir, const std::string& negative_d
         }
         };
 
-    load_from_dir(positive_dir, 1);
-    load_from_dir(negative_dir, 0);
+    load_from_dir(path_privet, 1);
+    load_from_dir(path_vklyuchay, 2);
+    load_from_dir(path_noise, 0, MAX_NEGATIVES);
 
     std::cout << "Загружено: " << data.size()
-        << " примеров (" << std::count(labels.begin(), labels.end(), 1)
-        << " позитивных, " << std::count(labels.begin(), labels.end(), 0) << " негативных)\n";
+        << " (Привет=" << std::count(labels.begin(), labels.end(), 1)
+        << ", Включай=" << std::count(labels.begin(), labels.end(), 2)
+        << ", Остальное=" << std::count(labels.begin(), labels.end(), 0) << ")\n";
 }
 
 // gamma = 2.0, alpha = class weight tensor
@@ -131,11 +134,13 @@ int main() {
         //std::string path_yes = "D:\\Work\\mfcc\\yes"; // директория с позитивными CSV
         //std::string path_no = "D:\\Work\\mfcc\\no";  // директория с негативными CSV
 
-        std::string path_yes = "D:\\Work\\media\\jarvis16000_mfcc";
+        std::string path_jarvis = "D:\\Work\\media\\jarvis16000_mfcc";
+        std::string path_turn = "D:\\Work\\media\\ВключиРок16000_mfcc";
+
         std::string path_no = "D:\\Work\\media\\speech_commands_v0.02_mfcc";
+        
 
-
-        load_dataset(path_yes, path_no, data, labels);
+        load_dataset(path_jarvis, path_turn, path_no, data, labels);
 
         std::vector<size_t> indices(data.size());
         std::iota(indices.begin(), indices.end(), 0);
@@ -170,9 +175,9 @@ int main() {
 
 
         // Пример: "Привет" — вес 5.0, "Не Привет" — вес 1.0
-        torch::Tensor class_weights = torch::tensor({ 1.0, 5.0 }, torch::kFloat32);
+        torch::Tensor class_weights = torch::tensor({ 1.0, 5.0, 5.0 }, torch::kFloat32);  // [шум, привет, включай]
 
-        const int epochs = 20;
+        const int epochs = 100;
         const int batch_size = 8;
 
         for (int epoch = 0; epoch < epochs; ++epoch) {
@@ -196,18 +201,36 @@ int main() {
             // Валидация
             model->eval();
             int correct = 0;
+            std::vector<std::vector<int>> confusion(3, std::vector<int>(3, 0));  // [real][pred]
+
             for (int i = 0; i < x_val.size(0); ++i) {
-                auto pred = model->forward(x_val[i].unsqueeze(0)).argmax(1).item<int>();
-                if (pred == y_val[i].item<int>()) correct++;
+                auto output = model->forward(x_val[i].unsqueeze(0));
+                int pred = output.argmax(1).item<int>();
+                int label = y_val[i].item<int>();
+
+                if (pred == label) correct++;
+                confusion[label][pred]++;
             }
 
             float acc = static_cast<float>(correct) / x_val.size(0);
+
+            // Печать confusion matrix
+            std::cout << "Confusion Matrix:\n";
+            std::cout << "   P0  P1  P2\n";
+            for (int real = 0; real < 3; ++real) {
+                std::cout << "R" << real << " ";
+                for (int pred = 0; pred < 3; ++pred) {
+                    std::cout << std::setw(4) << confusion[real][pred];
+                }
+                std::cout << "\n";
+            }
+
             std::cout << "Epoch [" << epoch + 1 << "/" << epochs << "] "
                 << "- Train Loss: " << total_loss
                 << ", Val Accuracy: " << acc * 100 << "%\n";
         }
 
-        torch::save(model, "model_mfcc.pt");
+        torch::save(model, "model_mfcc_3classes.pt");
         std::cout << "Model saved!\n";
     }
     catch (const std::exception& e)
