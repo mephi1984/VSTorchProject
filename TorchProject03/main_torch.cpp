@@ -19,7 +19,6 @@ struct CnnNetImpl : torch::nn::Module {
         : conv1(torch::nn::Conv1dOptions(13, 32, 5).stride(1).padding(2)),  // [B, 13, T] → [B, 32, T]
         conv2(torch::nn::Conv1dOptions(32, 64, 3).stride(1).padding(1)), // [B, 64, T]
         fc1(64, 32),
-        //fc2(32, 2)
         fc2(32, 3)
     {
         register_module("conv1", conv1);
@@ -44,14 +43,14 @@ torch::Tensor load_mfcc_csv(const std::string& path) {
     std::ifstream file(path);
     std::string line;
 
-    std::getline(file, line); // skip header
+    //std::getline(file, line); // skip header
     std::vector<std::vector<float>> frames;
 
     while (std::getline(file, line)) {
         std::istringstream ss(line);
         std::string token;
-        std::getline(ss, token, ';'); // frameIndex
-        std::getline(ss, token, ';'); // frameTime
+        //std::getline(ss, token, ';'); // frameIndex
+        //std::getline(ss, token, ';'); // frameTime
 
         std::vector<float> coeffs;
         while (std::getline(ss, token, ';')) {
@@ -134,10 +133,10 @@ int main() {
         //std::string path_yes = "D:\\Work\\mfcc\\yes"; // директория с позитивными CSV
         //std::string path_no = "D:\\Work\\mfcc\\no";  // директория с негативными CSV
 
-        std::string path_jarvis = "D:\\Work\\media\\jarvis16000_mfcc";
-        std::string path_turn = "D:\\Work\\media\\ВключиРок16000_mfcc";
+        std::string path_jarvis = "D:\\Work\\media\\jarvis16000_mfcc2";
+        std::string path_turn = "D:\\Work\\media\\ВключиРок16000_mfcc2";
 
-        std::string path_no = "D:\\Work\\media\\speech_commands_v0.02_mfcc";
+        std::string path_no = "D:\\Work\\media\\speech_commands_v0.02_mfcc2";
         
 
         load_dataset(path_jarvis, path_turn, path_no, data, labels);
@@ -173,8 +172,6 @@ int main() {
 
         torch::optim::Adam optimizer(model->parameters(), 0.0001);
 
-
-        // Пример: "Привет" — вес 5.0, "Не Привет" — вес 1.0
         torch::Tensor class_weights = torch::tensor({ 1.0, 5.0, 5.0 }, torch::kFloat32);  // [шум, привет, включай]
 
         const int epochs = 100;
@@ -230,7 +227,7 @@ int main() {
                 << ", Val Accuracy: " << acc * 100 << "%\n";
         }
 
-        torch::save(model, "model_mfcc_3classes.pt");
+        torch::save(model, "model_mfcc2_3classes.pt");
         std::cout << "Model saved!\n";
     }
     catch (const std::exception& e)
