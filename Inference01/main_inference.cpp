@@ -260,10 +260,10 @@ int main() {
     int n_mfcc_out = 13;
 
 
-    mfcc_buffer.resize(T_FIXED, std::vector<float>(n_mfcc_out, 0.0f));
+    //mfcc_buffer.resize(T_FIXED, std::vector<float>(n_mfcc_out, 0.0f));
     
 
-    std::string model_path = "C:\\Users\\User\\source\\repos\\TorchProject03\\TorchProject03\\model_mfcc2_3classes_tf100.pt";
+    std::string model_path = "C:\\Users\\User\\source\\repos\\TorchProject03\\TorchProject03\\model_mfcc2_3classes_tf_trim29_bkg_noaug.pt";
 
     try {
         // Загружаем сохраненное состояние (архитектуру и параметры) в созданный экземпляр
@@ -345,7 +345,7 @@ int main() {
     }
 
 
-    std::thread t(&threadFunction);
+    //std::thread t(&threadFunction);
 
     std::cout << "Recording from "
         << Pa_GetDeviceInfo(inputParameters.device)->name
@@ -364,13 +364,13 @@ int main() {
     Pa_CloseStream(stream);
     Pa_Terminate();
 
-    t.join();
+    ///t.join();
 
     return 0;
 }
-
+/*
 // Реализация функции processData (заглушка)
-void processData(const std::vector<float>& data) {
+void processData_old(const std::vector<float>& data) {
 
     int sr = 16000;
     // Параметры MFCC (должны соответствовать тем, что использовались при обучении)
@@ -429,7 +429,167 @@ void processData(const std::vector<float>& data) {
 
     mfcc_buffer_mutex.unlock();
 }
+*/
 
+void processData(const std::vector<float>& data) {
+
+    int sr = 16000;
+    // Параметры MFCC (должны соответствовать тем, что использовались при обучении)
+    int n_fft = 400;
+    int n_hop = 160;
+    int n_mel = 26; // Количество мел-фильтров
+    int n_mfcc_out = 13; // Итоговое количество MFCC коэффициентов
+    int fmin = 0;
+    int fmax = 8000; // Или sr / 2, если не указано иное
+    float power = 2.f;
+    int dct_type = 2; // Обычно тип 2
+    bool use_norm = true; // Использовать ли орто-нормализацию (соответствует norm='ortho')
+
+    //std::cout << "processData" << std::endl;
+
+
+    static std::vector<float> accumulatedData;
+
+    accumulatedData.insert(accumulatedData.end(), data.begin(), data.end());
+
+    if (accumulatedData.size() < n_fft)
+    {
+        return;
+    }
+
+    static std::vector<float> portionData;
+
+    portionData.resize(n_fft);
+
+    std::copy(accumulatedData.begin(), accumulatedData.begin() + n_fft, portionData.begin());
+
+    accumulatedData.erase(accumulatedData.begin(), accumulatedData.begin() + n_fft);
+
+    auto part_mfcc_vector = librosa::Feature::mfcc(portionData, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax, n_mfcc_out, use_norm, dct_type);
+
+    if (part_mfcc_vector.size() != 1)
+    {
+        throw std::runtime_error("mfcc data is not added");
+    }
+
+    //mfcc_buffer_mutex.lock();
+
+    
+
+
+    mfcc_buffer.insert(mfcc_buffer.end(), part_mfcc_vector[0]);
+
+    if (mfcc_buffer.size() < T_FIXED)
+    {
+        return;
+    }
+
+
+    while (mfcc_buffer.size() > T_FIXED)
+    {
+        mfcc_buffer.erase(mfcc_buffer.begin());
+    }
+
+    //mfcc_buffer_mutex.unlock();
+
+    int n_mfcc = 13;
+    int num_frames = T_FIXED;
+
+
+
+    std::array<float, 13 * T_FIXED> flat_mfcc;
+
+    auto itr = mfcc_buffer.begin();
+    for (size_t i = 0; i < T_FIXED; i++)
+    {
+        std::copy(itr->begin(), itr->end(), flat_mfcc.begin() + (i * 13));
+        itr++;
+    }
+
+    torch::Tensor input_tensor = torch::from_blob(flat_mfcc.data(), { num_frames, n_mfcc }, torch::kFloat);
+
+    // 3.3 Клонируем тензор, чтобы он владел своими данными
+    input_tensor = input_tensor.clone();
+
+    // 3.4. Транспонируем в [n_mfcc, num_frames]
+    input_tensor = input_tensor.transpose(0, 1); // Теперь форма [13, num_frames]
+
+    // 3.5. Добавляем измерение батча (batch dimension) в начало
+    input_tensor = input_tensor.unsqueeze(0); // Теперь форма [1, 13, num_frames]
+
+    // 3.6. Перемещаем тензор на то же устройство, что и модель
+    input_tensor = input_tensor.to(device);
+
+    //std::cout << "Input tensor prepared for model. Shape: " << input_tensor.sizes() << std::endl;
+
+    // +++ Используйте этот блок +++
+    torch::Tensor output_tensor;
+    try {
+        torch::NoGradGuard no_grad; // Отключаем градиенты для инференса
+        // Напрямую вызываем метод forward у нашего экземпляра модели
+        output_tensor = model->forward(input_tensor); // Передаем тензор напрямую
+    }
+    catch (const c10::Error& e) {
+        std::cerr << "Error during model inference:\n" << e.what() << std::endl;
+        return;
+    }
+    catch (const std::exception& e) { // Добавим обработку std::exception
+        std::cerr << "Error during model inference:\n" << e.what() << std::endl;
+        return;
+    }
+
+
+    // --- 5. Обработка результата ---
+    // output_tensor содержит логарифмы вероятностей (log_softmax) для каждого из 3 классов
+    // Нам нужен индекс класса с максимальным значением
+
+    // argmax вдоль оси классов (ось 1)
+    torch::Tensor predicted_idx_tensor = torch::argmax(output_tensor, 1); // Результат будет тензором формы [1]
+    int64_t predicted_idx = predicted_idx_tensor.item<int64_t>(); // Извлекаем значение индекса
+
+    // Получаем вероятности (опционально, если нужны именно они)
+    torch::Tensor probabilities = torch::exp(output_tensor); // exp(log_softmax) -> softmax
+
+    // Определяем имена классов (замените на ваши реальные имена)
+    static std::vector<std::string> class_names = { "noise", "jarvis", "turnon" };
+
+    // Получаем вероятность предсказанного класса
+    float confidence = probabilities[0][predicted_idx].item<float>();
+
+    // Порог вероятности
+    const float THRESHOLD = 0.6f;
+
+    if (predicted_idx != 0/* && confidence >= THRESHOLD*/)
+    {
+        std::cout << "--- Inference Results ---" << std::endl;
+        std::cout << "Raw model output (log probabilities): " << output_tensor << std::endl;
+        std::cout << "Probabilities: " << probabilities << std::endl; // Раскомментируйте, если нужны вероятности
+        std::cout << "Predicted class index: " << predicted_idx << std::endl;
+        std::cout << "Predicted class name: " << class_names[predicted_idx] << std::endl;
+
+    }
+    //std::cout << "Probabilities: " << probabilities << std::endl;
+    /*
+    static int a = 1;
+    std::string fileName = "mfcc" + std::to_string(a) + ".csv";
+    std::ofstream fout(fileName);
+    
+    //for (int i = 0; i < mfcc_buffer.size(); i++) {
+    for (auto itr = mfcc_buffer.begin(); itr != mfcc_buffer.end(); itr++)
+    {
+        fout << (*itr)[0];
+        for (int j = 1; j < itr->size(); j++)
+        {
+            fout << ";" << ((*itr)[j]);
+        }
+        fout << std::endl;
+    }
+    fout << std::endl;
+    fout << "Probabilities: " << probabilities << std::endl;
+    fout.close();
+    a++*/
+}
+/*
 void threadFunction()
 {
     int n_mfcc = 13;
@@ -455,15 +615,7 @@ void threadFunction()
             std::copy(itr->begin(), itr->end(), flat_mfcc.begin() + (i * 13));
             itr++;
         }
-            /*
-        static std::vector<float> flat_mfcc;
-        flat_mfcc.clear();
-        flat_mfcc.reserve(num_frames * n_mfcc);
-        for (auto itr = mfcc_buffer.begin(); itr != mfcc_buffer.end(); itr++)
-        {
-            flat_mfcc.insert(flat_mfcc.end(), itr->begin(), itr->end());
 
-        }*/
         mfcc_buffer_mutex.unlock();
 
         torch::Tensor input_tensor = torch::from_blob(flat_mfcc.data(), { num_frames, n_mfcc }, torch::kFloat);
@@ -526,7 +678,7 @@ void threadFunction()
         //std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Небольшая задержка в цикле
     }
 
-}
+}*/
 
 /*
 int main_old(int argc, char* argv[])

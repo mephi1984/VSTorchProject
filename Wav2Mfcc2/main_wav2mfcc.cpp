@@ -78,12 +78,13 @@ int main(int argc, char* argv[])
             return static_cast<float>(a) / 32767.f;
         });
 
+    /*
     auto [start_sample, end_sample] = trim_silence(x, sr);
     std::vector<float> x_trimmed(x.begin() + start_sample, x.begin() + end_sample);
 
     std::cout << "🔇 Trimmed silence: " << start_sample << " → " << end_sample << " ("
         << x_trimmed.size() << " samples, " << (x_trimmed.size() / (float)sr) << " sec)" << std::endl;
-
+        */
     std::cout << "Sample rate: " << sr << "Hz" << std::endl;
 
     int n_fft = 400;
@@ -94,7 +95,9 @@ int main(int argc, char* argv[])
     float power = 2.f;
 
     auto melspectrogram_start_time = std::chrono::system_clock::now();
-    std::vector<std::vector<float>> mels = librosa::Feature::melspectrogram(x_trimmed, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax);
+    //std::vector<std::vector<float>> mels = librosa::Feature::melspectrogram(x_trimmed, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax);
+    std::vector<std::vector<float>> mels = librosa::Feature::melspectrogram(x, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax);
+
     auto melspectrogram_end_time = std::chrono::system_clock::now();
     auto melspectrogram_duration = std::chrono::duration_cast<std::chrono::milliseconds>(melspectrogram_end_time - melspectrogram_start_time);
     std::cout << "Melspectrogram runing time is " << melspectrogram_duration.count() << "ms" << std::endl;
@@ -103,13 +106,15 @@ int main(int argc, char* argv[])
     std::cout << "Verify the energy of melspectrogram features:" << std::endl;
     std::cout << "mel.dims: [" << mels.size() << "," << mels[0].size() << "]" << std::endl;
 
-    auto mfcc_vector = librosa::Feature::mfcc(x_trimmed, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax, 13, true, 2);
+    ///auto mfcc_vector = librosa::Feature::mfcc(x_trimmed, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax, 13, true, 2);
+    auto mfcc_vector = librosa::Feature::mfcc(x, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax, 13, true, 2);
     int count = mfcc_vector.size();
 
     std::string csvFileName = argv[2];
     std::ofstream fout(csvFileName);
 
-    for (int i = 0; i < mfcc_vector.size(); i++) {
+    //trim first 29
+    for (int i = 29; i < mfcc_vector.size(); i++) {
 
         fout << (mfcc_vector[i][0]);
         for (int j = 1; j < mfcc_vector[i].size(); j++)
