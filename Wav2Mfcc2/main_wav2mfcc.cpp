@@ -1,4 +1,4 @@
-#define _CRT_SECURE_NO_WARNINGS
+﻿#define _CRT_SECURE_NO_WARNINGS
 #include "../wavreader.h"
 #include <librosa/librosa.h>
 
@@ -11,6 +11,38 @@
 #include <fstream>
 
 using namespace std;
+
+std::pair<int, int> trim_silence(const std::vector<float>& x, int sample_rate, float threshold_db = -40.0f, int frame_size = 400, int hop = 160) {
+    int num_frames = (x.size() - frame_size) / hop + 1;
+    std::vector<float> frame_energies;
+
+    for (int i = 0; i < num_frames; ++i) {
+        float sum_sq = 0.0f;
+        for (int j = 0; j < frame_size; ++j) {
+            float s = x[i * hop + j];
+            sum_sq += s * s;
+        }
+        float rms = std::sqrt(sum_sq / frame_size);
+        float db = 20.0f * std::log10(rms + 1e-8f); // avoid log(0)
+        frame_energies.push_back(db);
+    }
+
+    // find start and end indexes above threshold
+    int start_frame = 0;
+    while (start_frame < frame_energies.size() && frame_energies[start_frame] < threshold_db) {
+        ++start_frame;
+    }
+
+    int end_frame = frame_energies.size() - 1;
+    while (end_frame > start_frame && frame_energies[end_frame] < threshold_db) {
+        --end_frame;
+    }
+
+    int start_sample = std::max(0, start_frame * hop);
+    int end_sample = std::min((int)x.size(), end_frame * hop + frame_size);
+
+    return { start_sample, end_sample };
+}
 
 int main(int argc, char* argv[])
 {
@@ -46,6 +78,12 @@ int main(int argc, char* argv[])
             return static_cast<float>(a) / 32767.f;
         });
 
+    auto [start_sample, end_sample] = trim_silence(x, sr);
+    std::vector<float> x_trimmed(x.begin() + start_sample, x.begin() + end_sample);
+
+    std::cout << "🔇 Trimmed silence: " << start_sample << " → " << end_sample << " ("
+        << x_trimmed.size() << " samples, " << (x_trimmed.size() / (float)sr) << " sec)" << std::endl;
+
     std::cout << "Sample rate: " << sr << "Hz" << std::endl;
 
     int n_fft = 400;
@@ -56,7 +94,7 @@ int main(int argc, char* argv[])
     float power = 2.f;
 
     auto melspectrogram_start_time = std::chrono::system_clock::now();
-    std::vector<std::vector<float>> mels = librosa::Feature::melspectrogram(x, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax);
+    std::vector<std::vector<float>> mels = librosa::Feature::melspectrogram(x_trimmed, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax);
     auto melspectrogram_end_time = std::chrono::system_clock::now();
     auto melspectrogram_duration = std::chrono::duration_cast<std::chrono::milliseconds>(melspectrogram_end_time - melspectrogram_start_time);
     std::cout << "Melspectrogram runing time is " << melspectrogram_duration.count() << "ms" << std::endl;
@@ -65,7 +103,7 @@ int main(int argc, char* argv[])
     std::cout << "Verify the energy of melspectrogram features:" << std::endl;
     std::cout << "mel.dims: [" << mels.size() << "," << mels[0].size() << "]" << std::endl;
 
-    auto mfcc_vector = librosa::Feature::mfcc(x, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax, 13, true, 2);
+    auto mfcc_vector = librosa::Feature::mfcc(x_trimmed, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax, 13, true, 2);
     int count = mfcc_vector.size();
 
     std::string csvFileName = argv[2];
@@ -81,20 +119,6 @@ int main(int argc, char* argv[])
         fout << std::endl;
     }
     fout.close();
-
-
-    /*
-    std::cout << count << std::endl;
-    std::cout << std::endl;
-    for (int i = 0; i < mfcc_vector.size(); i++) {
-
-        for (int j = 0; j < mfcc_vector[i].size(); j++)
-        {
-            std::cout << (mfcc_vector[i][j]) << ";";
-        }
-        std::cout << std::endl;
-    }
-    */
 
 
     return 0;

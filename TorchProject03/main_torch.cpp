@@ -133,8 +133,8 @@ int main() {
         //std::string path_yes = "D:\\Work\\mfcc\\yes"; // директория с позитивными CSV
         //std::string path_no = "D:\\Work\\mfcc\\no";  // директория с негативными CSV
 
-        std::string path_jarvis = "D:\\Work\\media\\jarvis16000_mfcc2";
-        std::string path_turn = "D:\\Work\\media\\ВключиРок16000_mfcc2";
+        std::string path_jarvis = "D:\\Work\\media\\jarvis16000_mfcc3";
+        std::string path_turn = "D:\\Work\\media\\ВключиРок16000_mfcc3";
 
         std::string path_no = "D:\\Work\\media\\speech_commands_v0.02_mfcc2";
         
@@ -174,7 +174,7 @@ int main() {
 
         torch::Tensor class_weights = torch::tensor({ 1.0, 5.0, 5.0 }, torch::kFloat32);  // [шум, привет, включай]
 
-        const int epochs = 100;
+        const int epochs = 50;
         const int batch_size = 8;
 
         for (int epoch = 0; epoch < epochs; ++epoch) {
@@ -227,7 +227,7 @@ int main() {
                 << ", Val Accuracy: " << acc * 100 << "%\n";
         }
 
-        torch::save(model, "model_mfcc2_3classes.pt");
+        torch::save(model, "model_mfcc2_3classes_tf100.pt");
         std::cout << "Model saved!\n";
     }
     catch (const std::exception& e)
