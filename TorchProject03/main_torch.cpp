@@ -9,36 +9,50 @@
 namespace fs = std::filesystem;
 
 const int MFCC_DIM = 13; // 13 коэффициентов MFCC де-дельта-дельта
-const int64_t MAX_NEGATIVES = 101;
+const int64_t MAX_NEGATIVES_POSITIVES = 1300;
 
 struct CnnNetImpl : torch::nn::Module {
-    torch::nn::Conv1d conv1{ nullptr }, conv2{ nullptr };
+    torch::nn::Sequential conv_layers;
     torch::nn::Linear fc1{ nullptr }, fc2{ nullptr };
 
-    CnnNetImpl()
-        : conv1(torch::nn::Conv1dOptions(13, 32, 5).stride(1).padding(2)),  // [B, 13, T] → [B, 32, T]
-        conv2(torch::nn::Conv1dOptions(32, 64, 3).stride(1).padding(1)), // [B, 64, T]
-        fc1(64, 32),
-        fc2(32, 3)
-    {
-        register_module("conv1", conv1);
-        register_module("conv2", conv2);
+    CnnNetImpl() {
+        conv_layers = torch::nn::Sequential(
+            torch::nn::Conv1d(torch::nn::Conv1dOptions(13, 64, 5).stride(1).padding(2)),
+            torch::nn::BatchNorm1d(64),
+            torch::nn::ReLU(),
+            torch::nn::Dropout(0.2),
+
+            torch::nn::Conv1d(torch::nn::Conv1dOptions(64, 128, 3).stride(1).padding(1)),
+            torch::nn::BatchNorm1d(128),
+            torch::nn::ReLU(),
+            torch::nn::Dropout(0.2),
+
+            torch::nn::Conv1d(torch::nn::Conv1dOptions(128, 256, 3).stride(1).padding(1)),
+            torch::nn::BatchNorm1d(256),
+            torch::nn::ReLU(),
+            torch::nn::Dropout(0.3)
+        );
+
+        fc1 = torch::nn::Linear(256, 64);
+        fc2 = torch::nn::Linear(64, 5);  // 5 классов
+
+        register_module("conv_layers", conv_layers);
         register_module("fc1", fc1);
         register_module("fc2", fc2);
     }
 
     torch::Tensor forward(torch::Tensor x) {
-        x = torch::relu(conv1->forward(x));
-        x = torch::relu(conv2->forward(x));
-        x = torch::adaptive_avg_pool1d(x, 1).squeeze(2); // [B, 64, T] → [B, 64]
-        x = torch::relu(fc1->forward(x));
-        return torch::log_softmax(fc2->forward(x), 1);
+        x = conv_layers->forward(x);                      // [B, 13, T] → [B, 256, T]
+        x = torch::adaptive_avg_pool1d(x, 1).squeeze(2);  // [B, 256]
+        x = torch::relu(fc1->forward(x));                 // [B, 64]
+        x = torch::log_softmax(fc2->forward(x), 1);       // [B, 5]
+        return x;
     }
 };
 TORCH_MODULE(CnnNet);
 
-constexpr int T_FIXED = 100; // число временных кадров
-//constexpr int T_FIXED = 50; // число временных кадров
+//constexpr int T_FIXED = 100; // число временных кадров
+constexpr int T_FIXED = 140; // число временных кадров
 
 torch::Tensor load_mfcc_csv(const std::string& path) {
     std::ifstream file(path);
@@ -82,22 +96,23 @@ torch::Tensor load_mfcc_csv(const std::string& path) {
 }
 
 // Загрузка CSV-датасета
-void load_dataset(const std::string& path_privet, const std::string& path_vklyuchay, const std::string& path_noise,
+void load_dataset(const std::string& path_privet, const std::string& path_vklyuchay, const std::string& path_codered, const std::string& path_wakeup, const std::string& path_noise,
     std::vector<torch::Tensor>& data, std::vector<int64_t>& labels) {
 
-    int64_t neg_count = 0;
+    
 
     auto load_from_dir = [&](const std::string& dir_path, int64_t label, int64_t max_count = -1) {
+        int64_t neg_count = 0;
         for (const auto& entry : fs::recursive_directory_iterator(dir_path)) {
             if (!entry.is_regular_file()) continue;
             if (entry.path().extension() != ".csv") continue;
-            if (max_count > 0 && label == 0 && neg_count >= max_count) break;
+            if (max_count > 0 && neg_count >= max_count) break;
 
             try {
                 auto tensor = load_mfcc_csv(entry.path().string());
                 data.push_back(tensor);
                 labels.push_back(label);
-                if (label == 0) ++neg_count;
+                ++neg_count;
             }
             catch (const std::exception& e) {
                 std::cerr << "Ошибка при загрузке " << entry.path() << ": " << e.what() << "\n";
@@ -105,13 +120,18 @@ void load_dataset(const std::string& path_privet, const std::string& path_vklyuc
         }
         };
 
-    load_from_dir(path_privet, 1);
-    load_from_dir(path_vklyuchay, 2);
-    load_from_dir(path_noise, 0, MAX_NEGATIVES);
+    load_from_dir(path_privet, 1, MAX_NEGATIVES_POSITIVES);
+    load_from_dir(path_vklyuchay, 2, MAX_NEGATIVES_POSITIVES);
+    load_from_dir(path_codered, 3, MAX_NEGATIVES_POSITIVES);
+    load_from_dir(path_wakeup, 4, MAX_NEGATIVES_POSITIVES);
+    load_from_dir(path_noise, 0, MAX_NEGATIVES_POSITIVES);
 
+    
     std::cout << "Загружено: " << data.size()
         << " (Привет=" << std::count(labels.begin(), labels.end(), 1)
         << ", Включай=" << std::count(labels.begin(), labels.end(), 2)
+        << ", codered=" << std::count(labels.begin(), labels.end(), 3)
+        << ", wakeup=" << std::count(labels.begin(), labels.end(), 4)
         << ", Остальное=" << std::count(labels.begin(), labels.end(), 0) << ")\n";
 }
 
@@ -134,14 +154,16 @@ int main() {
         //std::string path_yes = "D:\\Work\\mfcc\\yes"; // директория с позитивными CSV
         //std::string path_no = "D:\\Work\\mfcc\\no";  // директория с негативными CSV
 
-        std::string path_jarvis = "D:\\Work\\media\\jarvis16000_mfcc3_trim29";
-        std::string path_turn = "D:\\Work\\media\\ВключиРок16000_mfcc3_trim29";
+        std::string path_jarvis = "D:\\Work\\media\\2025-04-07try2\\jarvis_all_aug_mfcc";
+        std::string path_turn = "D:\\Work\\media\\2025-04-07try2\\turnon_all_aug_mfcc";
+        std::string path_codered = "D:\\Work\\media\\2025-04-07try2\\protocol_all_aug_mfcc";
+        std::string path_wakeup = "D:\\Work\\media\\2025-04-07try2\\wakeup_all_aug_mfcc";
 
         ///std::string path_no = "D:\\Work\\media\\speech_commands_v0.02_mfcc2";
-        std::string path_no = "D:\\Work\\media\\noise_wav_mfcc";
+        std::string path_no = "D:\\Work\\media\\2025-04-07try2\\noise_wav_aug_mfcc";
         
 
-        load_dataset(path_jarvis, path_turn, path_no, data, labels);
+        load_dataset(path_jarvis, path_turn, path_codered, path_wakeup, path_no, data, labels);
 
         std::vector<size_t> indices(data.size());
         std::iota(indices.begin(), indices.end(), 0);
@@ -174,8 +196,7 @@ int main() {
 
         torch::optim::Adam optimizer(model->parameters(), 0.0001);
 
-        //torch::Tensor class_weights = torch::tensor({ 1.0, 5.0, 5.0 }, torch::kFloat32);  // [шум, привет, включай]
-        torch::Tensor class_weights = torch::tensor({ 1.0, 1.0, 1.0 }, torch::kFloat32);  // [шум, привет, включай]
+        torch::Tensor class_weights = torch::tensor({ 1.0, 1.0, 1.0, 1.0, 1.0 }, torch::kFloat32); 
 
         const int epochs = 30;
         const int batch_size = 8;
@@ -201,7 +222,7 @@ int main() {
             // Валидация
             model->eval();
             int correct = 0;
-            std::vector<std::vector<int>> confusion(3, std::vector<int>(3, 0));  // [real][pred]
+            std::vector<std::vector<int>> confusion(5, std::vector<int>(5, 0));  // [real][pred]
 
             for (int i = 0; i < x_val.size(0); ++i) {
                 auto output = model->forward(x_val[i].unsqueeze(0));
@@ -216,10 +237,10 @@ int main() {
 
             // Печать confusion matrix
             std::cout << "Confusion Matrix:\n";
-            std::cout << "   P0  P1  P2\n";
-            for (int real = 0; real < 3; ++real) {
+            std::cout << "   P0  P1  P2  P3  P4\n";
+            for (int real = 0; real < 5; ++real) {
                 std::cout << "R" << real << " ";
-                for (int pred = 0; pred < 3; ++pred) {
+                for (int pred = 0; pred < 5; ++pred) {
                     std::cout << std::setw(4) << confusion[real][pred];
                 }
                 std::cout << "\n";
@@ -230,7 +251,7 @@ int main() {
                 << ", Val Accuracy: " << acc * 100 << "%\n";
         }
 
-        torch::save(model, "model_mfcc2_3classes_tf_trim29_bkg_noaug.pt");
+        torch::save(model, "model_mfcc2_5classes_tf_mega_aug200.pt");
         std::cout << "Model saved!\n";
     }
     catch (const std::exception& e)

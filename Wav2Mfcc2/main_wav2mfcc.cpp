@@ -113,8 +113,8 @@ int main(int argc, char* argv[])
     std::string csvFileName = argv[2];
     std::ofstream fout(csvFileName);
 
-    //trim first 29
-    for (int i = 29; i < mfcc_vector.size(); i++) {
+
+    for (int i = 0; i < mfcc_vector.size(); i++) {
 
         fout << (mfcc_vector[i][0]);
         for (int j = 1; j < mfcc_vector[i].size(); j++)
