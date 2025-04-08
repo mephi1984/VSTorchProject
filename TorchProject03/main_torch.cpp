@@ -8,7 +8,7 @@
 
 namespace fs = std::filesystem;
 
-const int MFCC_DIM = 13; // 13 коэффициентов MFCC де-дельта-дельта
+const int MFCC_DIM = 13;
 const int64_t MAX_NEGATIVES_POSITIVES = 1300;
 
 struct CnnNetImpl : torch::nn::Module {
@@ -34,7 +34,7 @@ struct CnnNetImpl : torch::nn::Module {
         );
 
         fc1 = torch::nn::Linear(256, 64);
-        fc2 = torch::nn::Linear(64, 5);  // 5 классов
+        fc2 = torch::nn::Linear(64, 5);  
 
         register_module("conv_layers", conv_layers);
         register_module("fc1", fc1);
@@ -42,31 +42,26 @@ struct CnnNetImpl : torch::nn::Module {
     }
 
     torch::Tensor forward(torch::Tensor x) {
-        x = conv_layers->forward(x);                      // [B, 13, T] → [B, 256, T]
-        x = torch::adaptive_avg_pool1d(x, 1).squeeze(2);  // [B, 256]
-        x = torch::relu(fc1->forward(x));                 // [B, 64]
-        x = torch::log_softmax(fc2->forward(x), 1);       // [B, 5]
+        x = conv_layers->forward(x);                 
+        x = torch::adaptive_avg_pool1d(x, 1).squeeze(2); 
+        x = torch::relu(fc1->forward(x));            
+        x = torch::log_softmax(fc2->forward(x), 1); 
         return x;
     }
 };
 TORCH_MODULE(CnnNet);
 
-//constexpr int T_FIXED = 100; // число временных кадров
-constexpr int T_FIXED = 140; // число временных кадров
+constexpr int T_FIXED = 140; 
 
 torch::Tensor load_mfcc_csv(const std::string& path) {
     std::ifstream file(path);
     std::string line;
 
-    //std::getline(file, line); // skip header
     std::vector<std::vector<float>> frames;
 
     while (std::getline(file, line)) {
         std::istringstream ss(line);
         std::string token;
-        //std::getline(ss, token, ';'); // frameIndex
-        //std::getline(ss, token, ';'); // frameTime
-
         std::vector<float> coeffs;
         while (std::getline(ss, token, ';')) {
             coeffs.push_back(std::stof(token));
@@ -76,30 +71,23 @@ torch::Tensor load_mfcc_csv(const std::string& path) {
             frames.push_back(coeffs);
     }
 
-    // нормализуем до T_FIXED по времени
     if (frames.size() < T_FIXED) {
-        // дополняем нулями
         frames.resize(T_FIXED, std::vector<float>(MFCC_DIM, 0.0f));
     }
     else if (frames.size() > T_FIXED) {
-        // обрезаем
         frames.resize(T_FIXED);
     }
 
-    // [T, 13] → [1, 13, T]
     torch::Tensor t = torch::zeros({ T_FIXED, MFCC_DIM });
     for (size_t i = 0; i < T_FIXED; ++i)
         for (int j = 0; j < MFCC_DIM; ++j)
             t[i][j] = frames[i][j];
 
-    return t.transpose(0, 1).unsqueeze(0).clone(); // [1, 13, T]
+    return t.transpose(0, 1).unsqueeze(0).clone();
 }
 
-// Загрузка CSV-датасета
 void load_dataset(const std::string& path_privet, const std::string& path_vklyuchay, const std::string& path_codered, const std::string& path_wakeup, const std::string& path_noise,
     std::vector<torch::Tensor>& data, std::vector<int64_t>& labels) {
-
-    
 
     auto load_from_dir = [&](const std::string& dir_path, int64_t label, int64_t max_count = -1) {
         int64_t neg_count = 0;
@@ -135,7 +123,6 @@ void load_dataset(const std::string& path_privet, const std::string& path_vklyuc
         << ", Остальное=" << std::count(labels.begin(), labels.end(), 0) << ")\n";
 }
 
-// gamma = 2.0, alpha = class weight tensor
 torch::Tensor focal_loss(const torch::Tensor& input, const torch::Tensor& target, const torch::Tensor& alpha, float gamma = 2.0f) {
     auto logpt = torch::nll_loss(input, target, alpha, torch::Reduction::None);
     auto pt = torch::exp(-logpt);
@@ -151,15 +138,11 @@ int main() {
         std::vector<torch::Tensor> data;
         std::vector<int64_t> labels;
 
-        //std::string path_yes = "D:\\Work\\mfcc\\yes"; // директория с позитивными CSV
-        //std::string path_no = "D:\\Work\\mfcc\\no";  // директория с негативными CSV
-
         std::string path_jarvis = "D:\\Work\\media\\2025-04-07try2\\jarvis_all_aug_mfcc";
         std::string path_turn = "D:\\Work\\media\\2025-04-07try2\\turnon_all_aug_mfcc";
         std::string path_codered = "D:\\Work\\media\\2025-04-07try2\\protocol_all_aug_mfcc";
         std::string path_wakeup = "D:\\Work\\media\\2025-04-07try2\\wakeup_all_aug_mfcc";
 
-        ///std::string path_no = "D:\\Work\\media\\speech_commands_v0.02_mfcc2";
         std::string path_no = "D:\\Work\\media\\2025-04-07try2\\noise_wav_aug_mfcc";
         
 
@@ -219,7 +202,6 @@ int main() {
                 total_loss += loss.item<float>();
             }
 
-            // Валидация
             model->eval();
             int correct = 0;
             std::vector<std::vector<int>> confusion(5, std::vector<int>(5, 0));  // [real][pred]
@@ -235,7 +217,6 @@ int main() {
 
             float acc = static_cast<float>(correct) / x_val.size(0);
 
-            // Печать confusion matrix
             std::cout << "Confusion Matrix:\n";
             std::cout << "   P0  P1  P2  P3  P4\n";
             for (int real = 0; real < 5; ++real) {

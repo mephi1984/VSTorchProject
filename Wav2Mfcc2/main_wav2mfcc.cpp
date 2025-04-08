@@ -23,11 +23,11 @@ std::pair<int, int> trim_silence(const std::vector<float>& x, int sample_rate, f
             sum_sq += s * s;
         }
         float rms = std::sqrt(sum_sq / frame_size);
-        float db = 20.0f * std::log10(rms + 1e-8f); // avoid log(0)
+        float db = 20.0f * std::log10(rms + 1e-8f);
         frame_energies.push_back(db);
     }
 
-    // find start and end indexes above threshold
+
     int start_frame = 0;
     while (start_frame < frame_energies.size() && frame_energies[start_frame] < threshold_db) {
         ++start_frame;
@@ -53,7 +53,6 @@ int main(int argc, char* argv[])
     }
     std::string wavFileName = argv[1];
     void* h_x = wav_read_open(wavFileName.c_str());
-    //void* h_x = wav_read_open("D:\\Work\\media\\jarvis16000\\0000_16k_mono.wav");
 
     int format, channels, sr, bits_per_sample;
     unsigned int data_length;
@@ -78,13 +77,6 @@ int main(int argc, char* argv[])
             return static_cast<float>(a) / 32767.f;
         });
 
-    /*
-    auto [start_sample, end_sample] = trim_silence(x, sr);
-    std::vector<float> x_trimmed(x.begin() + start_sample, x.begin() + end_sample);
-
-    std::cout << "🔇 Trimmed silence: " << start_sample << " → " << end_sample << " ("
-        << x_trimmed.size() << " samples, " << (x_trimmed.size() / (float)sr) << " sec)" << std::endl;
-        */
     std::cout << "Sample rate: " << sr << "Hz" << std::endl;
 
     int n_fft = 400;
@@ -95,7 +87,6 @@ int main(int argc, char* argv[])
     float power = 2.f;
 
     auto melspectrogram_start_time = std::chrono::system_clock::now();
-    //std::vector<std::vector<float>> mels = librosa::Feature::melspectrogram(x_trimmed, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax);
     std::vector<std::vector<float>> mels = librosa::Feature::melspectrogram(x, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax);
 
     auto melspectrogram_end_time = std::chrono::system_clock::now();
@@ -106,7 +97,6 @@ int main(int argc, char* argv[])
     std::cout << "Verify the energy of melspectrogram features:" << std::endl;
     std::cout << "mel.dims: [" << mels.size() << "," << mels[0].size() << "]" << std::endl;
 
-    ///auto mfcc_vector = librosa::Feature::mfcc(x_trimmed, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax, 13, true, 2);
     auto mfcc_vector = librosa::Feature::mfcc(x, sr, n_fft, n_hop, "hann", false, "reflect", power, n_mel, fmin, fmax, 13, true, 2);
     int count = mfcc_vector.size();
 

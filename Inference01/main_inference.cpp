@@ -1,6 +1,6 @@
 ﻿#define _CRT_SECURE_NO_WARNINGS
-#include "../wavreader.h" // Ваша библиотека для чтения WAV
-#include <librosa/librosa.h> // Ваша C++ librosa
+#include "../wavreader.h"
+#include <librosa/librosa.h> 
 
 #include <iostream>
 #include <vector>
@@ -8,19 +8,16 @@
 #include <chrono>
 #include <numeric>
 #include <algorithm>
-#include <filesystem> // Для удобства работы с путями (опционально)
+#include <filesystem> 
 
-// --- Заголовки PyTorch ---
 #include <torch/torch.h>
-#include <torch/script.h> // Обязательно для torch::jit::load
+#include <torch/script.h> 
 
 #include <portaudio.h>
 #include <list>
 
-// Функция для обработки данных (будет определена позже)
 void processData(const std::vector<float>& data);
 
-// Структура для хранения аудио данных
 struct AudioData {
     std::vector<float> buffer;
     int samplesNeeded = 160;
@@ -29,7 +26,7 @@ struct AudioData {
 using namespace std;
 
 
-const int MFCC_DIM = 13; // 13 коэффициентов MFCC де-дельта-дельта
+const int MFCC_DIM = 13;
 const int64_t MAX_NEGATIVES = 500;
 
 
@@ -56,7 +53,7 @@ struct CnnNetImpl : torch::nn::Module {
         );
 
         fc1 = torch::nn::Linear(256, 64);
-        fc2 = torch::nn::Linear(64, 5);  // 5 классов
+        fc2 = torch::nn::Linear(64, 5); 
 
         register_module("conv_layers", conv_layers);
         register_module("fc1", fc1);
@@ -64,23 +61,21 @@ struct CnnNetImpl : torch::nn::Module {
     }
 
     torch::Tensor forward(torch::Tensor x) {
-        x = conv_layers->forward(x);                      // [B, 13, T] → [B, 256, T]
-        x = torch::adaptive_avg_pool1d(x, 1).squeeze(2);  // [B, 256]
-        x = torch::relu(fc1->forward(x));                 // [B, 64]
-        x = torch::log_softmax(fc2->forward(x), 1);       // [B, 5]
+        x = conv_layers->forward(x);              
+        x = torch::adaptive_avg_pool1d(x, 1).squeeze(2);  
+        x = torch::relu(fc1->forward(x));                 
+        x = torch::log_softmax(fc2->forward(x), 1);   
         return x;
     }
 };
 TORCH_MODULE(CnnNet);
 
-constexpr int T_FIXED = 140; // число временных кадров
+constexpr int T_FIXED = 140;
 
 CnnNet model;
 torch::Device device(torch::kCPU);
 
 
-
-// Callback-функция PortAudio
 static int audioCallback(const void* inputBuffer, void* outputBuffer,
     unsigned long framesPerBuffer,
     const PaStreamCallbackTimeInfo* timeInfo,
@@ -89,14 +84,12 @@ static int audioCallback(const void* inputBuffer, void* outputBuffer,
     AudioData* data = static_cast<AudioData*>(userData);
     const int16_t* samples = static_cast<const int16_t*>(inputBuffer);
 
-    (void)outputBuffer; // Предотвращаем предупреждение о неиспользуемой переменной
+    (void)outputBuffer;
 
     for (unsigned long i = 0; i < framesPerBuffer; ++i) {
-        // Конвертируем 16-bit в float (-1.0 до 1.0)
         float sample = static_cast<float>(samples[i]) / 32768.0f;
         data->buffer.push_back(sample);
 
-        // Когда накопилось достаточно сэмплов, обрабатываем их
         if (data->buffer.size() >= data->samplesNeeded) {
             processData(data->buffer);
             data->buffer.clear();
@@ -107,13 +100,8 @@ static int audioCallback(const void* inputBuffer, void* outputBuffer,
 }
 
 
-std::mutex mfcc_buffer_mutex;
 std::list<std::vector<float>> mfcc_buffer;
-volatile bool shouldExit = false;
 
-void threadFunction();
-
-// Функция для вывода списка устройств и выбора микрофона
 PaDeviceIndex selectInputDevice() {
     int numDevices = Pa_GetDeviceCount();
     if (numDevices < 1) {
@@ -168,23 +156,18 @@ PaDeviceIndex selectInputDevice() {
 int main() {
     int n_mfcc_out = 13;
 
-
-    //mfcc_buffer.resize(T_FIXED, std::vector<float>(n_mfcc_out, 0.0f));
-    
-
     std::string model_path = "C:\\Users\\User\\source\\repos\\TorchProject03\\TorchProject03\\model_mfcc2_5classes_tf_mega_aug200.pt";
 
     try {
-        // Загружаем сохраненное состояние (архитектуру и параметры) в созданный экземпляр
         torch::load(model, model_path);
-        model->eval(); // Переводим модель в режим оценки
+        model->eval();
         std::cout << "Model loaded successfully using torch::load from: " << model_path << std::endl;
     }
     catch (const c10::Error& e) {
         std::cerr << "Error loading the model with torch::load:\n" << e.what() << std::endl;
         return -1;
     }
-    catch (const std::exception& e) { // Добавим обработку std::exception на всякий случай
+    catch (const std::exception& e) {
         std::cerr << "Error loading the model with torch::load:\n" << e.what() << std::endl;
         return -1;
     }
@@ -194,23 +177,11 @@ int main() {
     PaError err;
     AudioData audioData;
 
-    // Инициализация PortAudio
     err = Pa_Initialize();
     if (err != paNoError) {
         std::cerr << "PortAudio error: " << Pa_GetErrorText(err) << std::endl;
         return 1;
     }
-
-
-    // Настройка параметров потока
-    //PaStreamParameters inputParameters;
-    /*
-    inputParameters.device = Pa_GetDefaultInputDevice();
-    if (inputParameters.device == paNoDevice) {
-        std::cerr << "No default input device" << std::endl;
-        Pa_Terminate();
-        return 1;
-    }*/
 
     PaDeviceIndex inputDevice = selectInputDevice();
     if (inputDevice == paNoDevice) {
@@ -218,23 +189,21 @@ int main() {
         return 1;
     }
 
-    // Настройка параметров потока
     PaStreamParameters inputParameters;
     inputParameters.device = inputDevice;
-    inputParameters.channelCount = 1;       // Моно
-    inputParameters.sampleFormat = paInt16; // 16-bit целые числа
+    inputParameters.channelCount = 1; 
+    inputParameters.sampleFormat = paInt16; 
     inputParameters.suggestedLatency =
         Pa_GetDeviceInfo(inputParameters.device)->defaultLowInputLatency;
     inputParameters.hostApiSpecificStreamInfo = nullptr;
 
-    // Открываем поток
     PaStream* stream;
     err = Pa_OpenStream(&stream,
         &inputParameters,
-        nullptr,    // Нет вывода
-        16000,      // Частота дискретизации 16 кГц
-        160,        // Кадры на буфер
-        paClipOff,  // Мы не будем выводить звук
+        nullptr,   
+        16000,      
+        160,      
+        paClipOff, 
         audioCallback,
         &audioData);
 
@@ -244,7 +213,6 @@ int main() {
         return 1;
     }
 
-    // Запускаем поток
     err = Pa_StartStream(stream);
     if (err != paNoError) {
         std::cerr << "PortAudio error: " << Pa_GetErrorText(err) << std::endl;
@@ -253,18 +221,12 @@ int main() {
         return 1;
     }
 
-
-    //std::thread t(&threadFunction);
-
     std::cout << "Recording from "
         << Pa_GetDeviceInfo(inputParameters.device)->name
         << "\nPress Enter to stop..." << std::endl;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    std::cin.get(); // Ждем нажатия Enter
+    std::cin.get();
 
-    shouldExit = true;
-
-    // Останавливаем и закрываем поток
     err = Pa_StopStream(stream);
     if (err != paNoError) {
         std::cerr << "PortAudio error: " << Pa_GetErrorText(err) << std::endl;
@@ -273,7 +235,6 @@ int main() {
     Pa_CloseStream(stream);
     Pa_Terminate();
 
-    ///t.join();
 
     return 0;
 }
@@ -282,18 +243,15 @@ int main() {
 void processData(const std::vector<float>& data) {
 
     int sr = 16000;
-    // Параметры MFCC (должны соответствовать тем, что использовались при обучении)
     int n_fft = 400;
     int n_hop = 160;
-    int n_mel = 26; // Количество мел-фильтров
-    int n_mfcc_out = 13; // Итоговое количество MFCC коэффициентов
+    int n_mel = 26;
+    int n_mfcc_out = 13; 
     int fmin = 0;
-    int fmax = 8000; // Или sr / 2, если не указано иное
+    int fmax = 8000; 
     float power = 2.f;
-    int dct_type = 2; // Обычно тип 2
-    bool use_norm = true; // Использовать ли орто-нормализацию (соответствует norm='ortho')
-
-    //std::cout << "processData" << std::endl;
+    int dct_type = 2;
+    bool use_norm = true; 
 
 
     static std::vector<float> accumulatedData;
@@ -320,11 +278,6 @@ void processData(const std::vector<float>& data) {
         throw std::runtime_error("mfcc data is not added");
     }
 
-    //mfcc_buffer_mutex.lock();
-
-    
-
-
     mfcc_buffer.insert(mfcc_buffer.end(), part_mfcc_vector[0]);
 
     if (mfcc_buffer.size() < T_FIXED)
@@ -337,8 +290,6 @@ void processData(const std::vector<float>& data) {
     {
         mfcc_buffer.erase(mfcc_buffer.begin());
     }
-
-    //mfcc_buffer_mutex.unlock();
 
     int n_mfcc = 13;
     int num_frames = T_FIXED;
@@ -356,62 +307,45 @@ void processData(const std::vector<float>& data) {
 
     torch::Tensor input_tensor = torch::from_blob(flat_mfcc.data(), { num_frames, n_mfcc }, torch::kFloat);
 
-    // 3.3 Клонируем тензор, чтобы он владел своими данными
     input_tensor = input_tensor.clone();
 
-    // 3.4. Транспонируем в [n_mfcc, num_frames]
-    input_tensor = input_tensor.transpose(0, 1); // Теперь форма [13, num_frames]
+    input_tensor = input_tensor.transpose(0, 1);
 
-    // 3.5. Добавляем измерение батча (batch dimension) в начало
-    input_tensor = input_tensor.unsqueeze(0); // Теперь форма [1, 13, num_frames]
+    input_tensor = input_tensor.unsqueeze(0); 
 
-    // 3.6. Перемещаем тензор на то же устройство, что и модель
     input_tensor = input_tensor.to(device);
 
-    //std::cout << "Input tensor prepared for model. Shape: " << input_tensor.sizes() << std::endl;
-
-    // +++ Используйте этот блок +++
     torch::Tensor output_tensor;
     try {
-        torch::NoGradGuard no_grad; // Отключаем градиенты для инференса
-        // Напрямую вызываем метод forward у нашего экземпляра модели
-        output_tensor = model->forward(input_tensor); // Передаем тензор напрямую
+        torch::NoGradGuard no_grad;
+        output_tensor = model->forward(input_tensor);
     }
     catch (const c10::Error& e) {
         std::cerr << "Error during model inference:\n" << e.what() << std::endl;
         return;
     }
-    catch (const std::exception& e) { // Добавим обработку std::exception
+    catch (const std::exception& e) { 
         std::cerr << "Error during model inference:\n" << e.what() << std::endl;
         return;
     }
 
 
-    // --- 5. Обработка результата ---
-    // output_tensor содержит логарифмы вероятностей (log_softmax) для каждого из 3 классов
-    // Нам нужен индекс класса с максимальным значением
+    torch::Tensor predicted_idx_tensor = torch::argmax(output_tensor, 1);
+    int64_t predicted_idx = predicted_idx_tensor.item<int64_t>(); 
 
-    // argmax вдоль оси классов (ось 1)
-    torch::Tensor predicted_idx_tensor = torch::argmax(output_tensor, 1); // Результат будет тензором формы [1]
-    int64_t predicted_idx = predicted_idx_tensor.item<int64_t>(); // Извлекаем значение индекса
+    torch::Tensor probabilities = torch::exp(output_tensor);
 
-    // Получаем вероятности (опционально, если нужны именно они)
-    torch::Tensor probabilities = torch::exp(output_tensor); // exp(log_softmax) -> softmax
-
-    // Определяем имена классов (замените на ваши реальные имена)
     static std::vector<std::string> class_names = { "noise", "jarvis", "turnon", "codered", "wakeup" };
 
-    // Получаем вероятность предсказанного класса
     float confidence = probabilities[0][predicted_idx].item<float>();
 
-    // Порог вероятности
     const float THRESHOLD = 0.8f;
 
-    if (predicted_idx != 0/* && predicted_idx != 3 */ && confidence >= THRESHOLD)
+    if (predicted_idx != 0&& confidence >= THRESHOLD)
     {
         std::cout << "--- Inference Results ---" << std::endl;
         std::cout << "Raw model output (log probabilities): " << output_tensor << std::endl;
-        std::cout << "Probabilities: " << probabilities << std::endl; // Раскомментируйте, если нужны вероятности
+        std::cout << "Probabilities: " << probabilities << std::endl;
         std::cout << "Predicted class index: " << predicted_idx << std::endl;
         std::cout << "Predicted class name: " << class_names[predicted_idx] << std::endl;
 
