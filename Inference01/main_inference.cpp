@@ -1,6 +1,6 @@
 ﻿#define _CRT_SECURE_NO_WARNINGS
 #include "../wavreader.h"
-#include <librosa/librosa.h> 
+ #include <librosa/librosa.h> 
 
 #include <iostream>
 #include <vector>
@@ -83,7 +83,7 @@ static int audioCallback(const void* inputBuffer, void* outputBuffer,
     void* userData) {
     AudioData* data = static_cast<AudioData*>(userData);
     const int16_t* samples = static_cast<const int16_t*>(inputBuffer);
-
+    //std::cout << framesPerBuffer << std::endl;
     (void)outputBuffer;
 
     for (unsigned long i = 0; i < framesPerBuffer; ++i) {

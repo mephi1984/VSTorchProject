@@ -9,7 +9,7 @@
 namespace fs = std::filesystem;
 
 const int MFCC_DIM = 13;
-const int64_t MAX_NEGATIVES_POSITIVES = 1300;
+const int64_t MAX_NEGATIVES_POSITIVES = 202;
 
 struct CnnNetImpl : torch::nn::Module {
     torch::nn::Sequential conv_layers;
@@ -138,12 +138,12 @@ int main() {
         std::vector<torch::Tensor> data;
         std::vector<int64_t> labels;
 
-        std::string path_jarvis = "D:\\Work\\media\\2025-04-07try2\\jarvis_all_aug_mfcc";
-        std::string path_turn = "D:\\Work\\media\\2025-04-07try2\\turnon_all_aug_mfcc";
-        std::string path_codered = "D:\\Work\\media\\2025-04-07try2\\protocol_all_aug_mfcc";
-        std::string path_wakeup = "D:\\Work\\media\\2025-04-07try2\\wakeup_all_aug_mfcc";
+        std::string path_jarvis = "D:\\Work\\media\\pi2025-04-13\\jarvis_pi";
+        std::string path_turn = "D:\\Work\\media\\pi2025-04-13\\build_pi";
+        std::string path_codered = "D:\\Work\\media\\pi2025-04-13\\speak_pi";
+        std::string path_wakeup = "D:\\Work\\media\\pi2025-04-13\\wakeup_pi";
 
-        std::string path_no = "D:\\Work\\media\\2025-04-07try2\\noise_wav_aug_mfcc";
+        std::string path_no = "D:\\Work\\media\\pi2025-04-13\\noise_pi";
         
 
         load_dataset(path_jarvis, path_turn, path_codered, path_wakeup, path_no, data, labels);
@@ -181,7 +181,7 @@ int main() {
 
         torch::Tensor class_weights = torch::tensor({ 1.0, 1.0, 1.0, 1.0, 1.0 }, torch::kFloat32); 
 
-        const int epochs = 30;
+        const int epochs = 15;
         const int batch_size = 8;
 
         for (int epoch = 0; epoch < epochs; ++epoch) {
@@ -232,7 +232,7 @@ int main() {
                 << ", Val Accuracy: " << acc * 100 << "%\n";
         }
 
-        torch::save(model, "model_mfcc2_5classes_tf_mega_aug200.pt");
+        torch::save(model, "newmodel_pi_5classes_tf_mega_noaug200.pt");
         std::cout << "Model saved!\n";
     }
     catch (const std::exception& e)
