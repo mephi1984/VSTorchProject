@@ -16,3 +16,11 @@ target_link_libraries(rpiInference portaudio)
 #target_link_libraries(rpiInference samplerate)
 
 set_property(TARGET rpiInference PROPERTY CXX_STANDARD 17)
+
+
+add_executable(soundRecorderPi wavreader.c SoundRecorderPi/main_recorder.cpp)
+target_include_directories(soundRecorderPi PUBLIC /home/mephi/Work/portaudio/portaudio-19.7.0/build-rpi/install/include)
+target_include_directories(soundRecorderPi PUBLIC /home/mephi/Work/LibrosaCpp)
+target_link_directories(soundRecorderPi PUBLIC /home/mephi/Work/portaudio/portaudio-19.7.0/build-rpi/install/lib)
+target_link_libraries(soundRecorderPi portaudio sndfile)
+set_property(TARGET soundRecorderPi PROPERTY CXX_STANDARD 17)
