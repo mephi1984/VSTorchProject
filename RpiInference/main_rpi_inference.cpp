@@ -17,7 +17,158 @@
 
 #include <list>
 
+#include <thread>
+#include <cstdlib>
+#include <vorbis/vorbisfile.h>
+#include <ao/ao.h>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
+#include <sndfile.h>
+#include <memory>
+
 // PA_ALSA_PLUGHW="1"
+
+
+class AudioPlayer {
+    public:
+        AudioPlayer() : stopFlag(false) {
+            workerThread = std::thread(&AudioPlayer::playerThread, this);
+        }
+    
+        ~AudioPlayer() {
+            stop();
+            if (workerThread.joinable()) {
+                workerThread.join();
+            }
+        }
+    
+        // �������� ���� � �������
+        void enqueue(const std::string& filename) {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            trackQueue.push(filename);
+            queueCond.notify_one();  // ���������� ����� ������
+        }
+    
+        // ���������� ��������������� (������� ���������)
+        void stop() {
+            stopFlag = true;
+            std::lock_guard<std::mutex> lock(queueMutex);
+            while (!trackQueue.empty()) {
+                trackQueue.pop();
+            }
+            queueCond.notify_one();  // ������������ �����, ���� �� ���
+        }
+    
+        // �������� ������� (������� ���� ��������)
+        void clearQueue() {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            while (!trackQueue.empty()) {
+                trackQueue.pop();
+            }
+        }
+    
+    //private:
+        std::queue<std::string> trackQueue;  // ������� ������
+        std::mutex queueMutex;              // ������ �������
+        std::condition_variable queueCond;   // �������� ���������� ��� ��������
+        std::atomic<bool> stopFlag;         // ���� ���������
+        std::thread workerThread;           // ����� ������
+    
+        // �����, ������� ������������� ����� �� �������
+        void playerThread() {
+            while (!stopFlag) {
+                std::string filename;
+    
+                // �����������, ���� �� �������� ���� ��� �� ����� stopFlag
+                {
+                    std::unique_lock<std::mutex> lock(queueMutex);
+                    queueCond.wait(lock, [this] {
+                        return !trackQueue.empty() || stopFlag;
+                    });
+    
+                    if (stopFlag) break;
+    
+                    filename = trackQueue.front();
+                    trackQueue.pop();
+                }
+    
+                // ������������� ����
+                playOggFile(filename);
+            }
+        }
+    
+        // ��������������� Ogg-����� (���������� ������ ����)
+        void playOggFile(const std::string& filename) {
+
+            // 2. ��������� ���������
+            SF_INFO sfinfo;
+            SNDFILE* file = sf_open(filename.c_str(), SFM_READ, &sfinfo);
+            if (!file) {
+                std::cerr << "Failed to open file: " << sf_strerror(NULL) << std::endl;
+                Pa_Terminate();
+                return;
+            }
+
+            std::cout << "File opened. Channels: " << sfinfo.channels 
+                    << ", Sample rate: " << sfinfo.samplerate << std::endl;
+
+            // 3. ��������� ����� PortAudio
+            PaStream* stream;
+            PaError paErr;
+            paErr = Pa_OpenDefaultStream(
+                &stream,
+                0,                  // ��� ������� ������� (������ ���������������)
+                sfinfo.channels,    // ���������� �������� �������
+                paFloat32,          // 32-bit floating point
+                sfinfo.samplerate,
+                256,                // ������ ������ (����� ������������)
+                nullptr,            // ��� callback
+                nullptr             // ��� ���������������� ������
+            );
+
+            if (paErr != paNoError) {
+                std::cerr << "PortAudio stream error: " << Pa_GetErrorText(paErr) << std::endl;
+                sf_close(file);
+                Pa_Terminate();
+                return;
+            }
+
+            // 4. ��������� �����
+            paErr = Pa_StartStream(stream);
+            if (paErr != paNoError) {
+                std::cerr << "PortAudio start error: " << Pa_GetErrorText(paErr) << std::endl;
+                Pa_CloseStream(stream);
+                sf_close(file);
+                Pa_Terminate();
+                return;
+            }
+
+            // 5. ������ � ������������� ������
+            constexpr int bufferSize = 1024;
+            float buffer[bufferSize * sfinfo.channels];  // ��������� ���������� �������!
+
+            while (true) {
+                sf_count_t framesRead = sf_readf_float(file, buffer, bufferSize);
+                if (framesRead <= 0) break;  // ����� ����� ��� ������
+
+                // ���������� ������ � ����� (������� ���������� ������, � �� ����!)
+                paErr = Pa_WriteStream(stream, buffer, framesRead);
+                if (paErr != paNoError) {
+                    std::cerr << "PortAudio write error: " << Pa_GetErrorText(paErr) << std::endl;
+                    break;
+                }
+            }
+
+            // 6. ������������� � ��������� ��
+            Pa_StopStream(stream);
+            Pa_CloseStream(stream);
+            sf_close(file);
+        }
+    };
+    
+
+
 
 void processData(const std::vector<float>& data);
 
@@ -130,6 +281,7 @@ PaDeviceIndex selectInputDevice() {
     }
 
     PaDeviceIndex selectedDevice;
+    /*
     while (true) {
         std::cout << "Select input device (0-" << numDevices - 1 << "): ";
         std::cin >> selectedDevice;
@@ -153,14 +305,19 @@ PaDeviceIndex selectInputDevice() {
         }
 
         break;
-    }
+    }*/
+
+    selectedDevice = 1;
 
     return selectedDevice;
 }
 
+std::shared_ptr<AudioPlayer> audioPlayer;
 
 int main() {
     int n_mfcc_out = 13;
+
+    audioPlayer = std::make_shared<AudioPlayer>();
 
     std::string model_path = "/home/mephi/newmodel_pi_5classes_tf_mega_noaug200.pt";
 
@@ -259,6 +416,12 @@ void processData(const std::vector<float>& data) {
     int dct_type = 2;
     bool use_norm = true; 
 
+    if (audioPlayer->trackQueue.size() != 0)
+    {
+        std::cout << "queue size = " << audioPlayer->trackQueue.size() << std::endl;
+        return;
+    }
+
 
     static std::vector<float> accumulatedData;
 
@@ -290,7 +453,6 @@ void processData(const std::vector<float>& data) {
     {
         return;
     }
-
 
     while (mfcc_buffer.size() > T_FIXED)
     {
@@ -345,10 +507,10 @@ void processData(const std::vector<float>& data) {
 
     float confidence = probabilities[0][predicted_idx].item<float>();
 
-    const float THRESHOLD = 0.7f;
+    const float THRESHOLD = 0.4f;
     //std::cout << "-Probabilities: " << probabilities << std::endl;
         
-    if (predicted_idx != 0 && predicted_idx !=3 && (confidence >= THRESHOLD || (predicted_idx == 1 && confidence >= 0.5)))
+    if (predicted_idx != 0 && predicted_idx !=3 && (predicted_idx == 2 && confidence >= 0.6 || predicted_idx == 4 && confidence >= THRESHOLD || (predicted_idx == 1 && confidence >= 0.3)))
     {
         std::cout << "--- Inference Results ---" << std::endl;
         std::cout << "Raw model output (log probabilities): " << output_tensor << std::endl;
@@ -357,6 +519,29 @@ void processData(const std::vector<float>& data) {
         std::cout << "Predicted class name: " << class_names[predicted_idx] << std::endl;
 
         mfcc_buffer.clear();
+
+        if (predicted_idx == 1)
+        {
+            //threadIsRunning = true;
+            audioPlayer->enqueue("/home/mephi/Media/351556__richerlandtv__connect3.wav");
+            audioPlayer->enqueue("/home/mephi/Media/reply_jarvis.wav");
+            //audioThread = std::thread(playOggFile, "/home/mephi/Media/reply_jarvis.ogg");
+        }
+        else if (predicted_idx == 2)
+        {
+            //threadIsRunning = true;
+            //audioThread = std::thread(playOggFile, "/home/mephi/Media/build_reply.ogg");
+            audioPlayer->enqueue("/home/mephi/Media/351556__richerlandtv__connect3.wav");
+            audioPlayer->enqueue("/home/mephi/Media/build_reply.wav");
+        }
+        else if (predicted_idx == 4)
+        {
+            //threadIsRunning = true;
+            //audioThread = std::thread(playOggFile, "/home/mephi/Media/reply_wakeup.ogg");
+            audioPlayer->enqueue("/home/mephi/Media/351556__richerlandtv__connect3.wav");
+            audioPlayer->enqueue("/home/mephi/Media/reply_wakeup.wav");
+        }
+
 
     }
 
