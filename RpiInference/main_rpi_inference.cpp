@@ -336,6 +336,7 @@ int main() {
     }
 
     model->to(device);
+
     
     PaError err;
     AudioData audioData;
@@ -351,6 +352,12 @@ int main() {
         Pa_Terminate();
         return 1;
     }
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    
+    audioPlayer->enqueue("/home/mephi/Media/351556__richerlandtv__connect3.wav");
+
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    
 
     PaStreamParameters inputParameters;
     inputParameters.device = inputDevice;
@@ -388,8 +395,9 @@ int main() {
     std::cout << "Recording from "
         << Pa_GetDeviceInfo(inputParameters.device)->name
         << "\nPress Enter to stop..." << std::endl;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    std::cin.get();
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 
     err = Pa_StopStream(stream);
     if (err != paNoError) {
