@@ -6,9 +6,6 @@ set(CMAKE_PREFIX_PATH "/home/mephi/Work/portaudio/portaudio-19.7.0/build-rpi/ins
 find_package(Torch REQUIRED)
 
 find_library(AO_LIB ao)
-find_library(VORBIS_LIB vorbis)
-find_library(VORBISFILE_LIB vorbisfile)
-
 
 add_executable(rpiInference wavreader.c RpiInference/main_rpi_inference.cpp)
 target_link_libraries(rpiInference "${TORCH_LIBRARIES}")
@@ -16,7 +13,6 @@ target_include_directories(rpiInference PUBLIC /home/mephi/Work/portaudio/portau
 target_include_directories(rpiInference PUBLIC /home/mephi/Work/LibrosaCpp)
 target_link_directories(rpiInference PUBLIC /home/mephi/Work/portaudio/portaudio-19.7.0/build-rpi/install/lib)
 target_link_libraries(rpiInference portaudio sndfile)
-#target_link_libraries(rpiInference samplerate)
 
 target_link_libraries(rpiInference
     ${AO_LIB}
