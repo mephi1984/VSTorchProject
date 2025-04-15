@@ -187,6 +187,7 @@ int main() {
         for (int epoch = 0; epoch < epochs; ++epoch) {
             model->train();
             float total_loss = 0.0;
+            int train_correct = 0;
 
             for (size_t i = 0; i < x_train.size(0); i += batch_size) {
                 size_t end = std::min(int64_t(i + batch_size), x_train.size(0));
@@ -200,39 +201,44 @@ int main() {
                 optimizer.step();
 
                 total_loss += loss.item<float>();
+
+                auto preds = output.argmax(1);
+                train_correct += preds.eq(batch_y).sum().item<int>();
             }
 
+            float train_accuracy = static_cast<float>(train_correct) / x_train.size(0);
+            float avg_train_loss = total_loss / (x_train.size(0) / batch_size);
+
             model->eval();
-            int correct = 0;
-            std::vector<std::vector<int>> confusion(5, std::vector<int>(5, 0));  // [real][pred]
+            int val_correct = 0;
+            float val_loss = 0.0;
+            std::vector<std::vector<int>> confusion(5, std::vector<int>(5, 0));
 
             for (int i = 0; i < x_val.size(0); ++i) {
                 auto output = model->forward(x_val[i].unsqueeze(0));
+                auto loss = focal_loss(output, y_val[i].unsqueeze(0), class_weights);
+                val_loss += loss.item<float>();
+
                 int pred = output.argmax(1).item<int>();
                 int label = y_val[i].item<int>();
 
-                if (pred == label) correct++;
+                if (pred == label) val_correct++;
                 confusion[label][pred]++;
             }
 
-            float acc = static_cast<float>(correct) / x_val.size(0);
+            float val_accuracy = static_cast<float>(val_correct) / x_val.size(0);
+            float avg_val_loss = val_loss / x_val.size(0);
 
-            std::cout << "Confusion Matrix:\n";
-            std::cout << "   P0  P1  P2  P3  P4\n";
-            for (int real = 0; real < 5; ++real) {
-                std::cout << "R" << real << " ";
-                for (int pred = 0; pred < 5; ++pred) {
-                    std::cout << std::setw(4) << confusion[real][pred];
-                }
-                std::cout << "\n";
-            }
+            std::cout << "Epoch [" << epoch + 1 << "/" << epochs << "]\n";
+            std::cout << "  Train Loss: " << avg_train_loss
+                << "  Train Acc: " << train_accuracy * 100 << "%\n";
+            std::cout << "  Val Loss: " << avg_val_loss
+                << "  Val Acc: " << val_accuracy * 100 << "%\n";
 
-            std::cout << "Epoch [" << epoch + 1 << "/" << epochs << "] "
-                << "- Train Loss: " << total_loss
-                << ", Val Accuracy: " << acc * 100 << "%\n";
+            std::cout << "--------------------------------\n";
         }
 
-        torch::save(model, "newmodel_pi_5classes_tf_mega_noaug200.pt");
+        torch::save(model, "2025-04-15_newmodel_pi_5classes_tf_mega_noaug200.pt");
         std::cout << "Model saved!\n";
     }
     catch (const std::exception& e)
