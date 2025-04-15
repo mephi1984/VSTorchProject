@@ -22,21 +22,18 @@ static bool timeToExit = false;
 std::string find_next_available_filename(const std::string& suffix = ".csv") {
     const std::string prefix = "wakeup";
     int next_number = 1;
-    const int max_files = 10000; // ������������ ���������� ������ ��� ��������
+    const int max_files = 10000; 
 
     for (; next_number <= max_files; ++next_number) {
-        // ����������� ����� � �������� ������ (4 �����)
         std::ostringstream oss;
         oss << prefix << std::setw(4) << std::setfill('0') << next_number << suffix;
         std::string filename = oss.str();
 
-        // ���������, ���������� �� ����
         if (!fs::exists(filename)) {
             return filename;
         }
     }
 
-    // ���� ��� ����� �� max_files ����������, ���������� ������ ������
     return "";
 }
 
@@ -70,11 +67,10 @@ struct AudioData {
         }
     }
 
-    // � ��������� AudioData �������� �����:
     void finishRecording() {
         if (wavFile) {
             sf_close(wavFile);
-            wavFile = nullptr; // �������� ��� ��������
+            wavFile = nullptr;
         }
     }
 
@@ -151,31 +147,6 @@ PaDeviceIndex selectInputDevice() {
 
     PaDeviceIndex selectedDevice;
     selectedDevice = 1;
-    /*
-    while (true) {
-        std::cout << "Select input device (0-" << numDevices - 1 << "): ";
-        std::cin >> selectedDevice;
-
-        if (std::cin.fail()) {
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            std::cout << "Invalid input. Please enter a number." << std::endl;
-            continue;
-        }
-
-        if (selectedDevice < 0 || selectedDevice >= numDevices) {
-            std::cout << "Device index out of range. Try again." << std::endl;
-            continue;
-        }
-
-        deviceInfo = Pa_GetDeviceInfo(selectedDevice);
-        if (deviceInfo->maxInputChannels < 1) {
-            std::cout << "Selected device has no input channels. Try again." << std::endl;
-            continue;
-        }
-
-        break;
-    }*/
 
     return selectedDevice;
 }
@@ -244,8 +215,6 @@ int main() {
     {
         std::cout << "time to stop" << std::endl;
     }
-
-    //audioData.finishRecording();
 
     err = Pa_StopStream(stream);
     if (err != paNoError) {

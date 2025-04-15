@@ -19,7 +19,6 @@
 
 #include <thread>
 #include <cstdlib>
-#include <vorbis/vorbisfile.h>
 #include <ao/ao.h>
 #include <mutex>
 #include <condition_variable>
@@ -42,25 +41,23 @@ class AudioPlayer {
                 workerThread.join();
             }
         }
-    
-        // �������� ���� � �������
+   
         void enqueue(const std::string& filename) {
             std::lock_guard<std::mutex> lock(queueMutex);
             trackQueue.push(filename);
-            queueCond.notify_one();  // ���������� ����� ������
+            queueCond.notify_one();  
         }
     
-        // ���������� ��������������� (������� ���������)
+
         void stop() {
             stopFlag = true;
             std::lock_guard<std::mutex> lock(queueMutex);
             while (!trackQueue.empty()) {
                 trackQueue.pop();
             }
-            queueCond.notify_one();  // ������������ �����, ���� �� ���
+            queueCond.notify_one(); 
         }
     
-        // �������� ������� (������� ���� ��������)
         void clearQueue() {
             std::lock_guard<std::mutex> lock(queueMutex);
             while (!trackQueue.empty()) {
@@ -68,21 +65,18 @@ class AudioPlayer {
             }
         }
     
-    //private:
-        std::queue<std::string> trackQueue;  // ������� ������
-        std::mutex queueMutex;              // ������ �������
-        std::condition_variable queueCond;   // �������� ���������� ��� ��������
-        std::atomic<bool> stopFlag;         // ���� ���������
-        std::thread workerThread;           // ����� ������
+        std::queue<std::string> trackQueue;  
+        std::mutex queueMutex;  
+        std::condition_variable queueCond;  
+        std::atomic<bool> stopFlag;    
+        std::thread workerThread;      
 
         volatile bool isPlaying = false;
     
-        // �����, ������� ������������� ����� �� �������
         void playerThread() {
             while (!stopFlag) {
                 std::string filename;
     
-                // �����������, ���� �� �������� ���� ��� �� ����� stopFlag
                 {
                     std::unique_lock<std::mutex> lock(queueMutex);
                     queueCond.wait(lock, [this] {
@@ -95,16 +89,15 @@ class AudioPlayer {
                     trackQueue.pop();
                 }
     
-                // ������������� ����
-                playOggFile(filename);
+                playWavFile(filename);
                 isPlaying = false;
             }
         }
     
-        // ��������������� Ogg-����� (���������� ������ ����)
-        void playOggFile(const std::string& filename) {
 
-            // 2. ��������� ���������
+        void playWavFile(const std::string& filename) {
+
+
             SF_INFO sfinfo;
             SNDFILE* file = sf_open(filename.c_str(), SFM_READ, &sfinfo);
             if (!file) {
@@ -116,18 +109,17 @@ class AudioPlayer {
             std::cout << "File opened. Channels: " << sfinfo.channels 
                     << ", Sample rate: " << sfinfo.samplerate << std::endl;
 
-            // 3. ��������� ����� PortAudio
             PaStream* stream;
             PaError paErr;
             paErr = Pa_OpenDefaultStream(
                 &stream,
-                0,                  // ��� ������� ������� (������ ���������������)
-                sfinfo.channels,    // ���������� �������� �������
-                paFloat32,          // 32-bit floating point
+                0,                
+                sfinfo.channels, 
+                paFloat32,         
                 sfinfo.samplerate,
-                256,                // ������ ������ (����� ������������)
-                nullptr,            // ��� callback
-                nullptr             // ��� ���������������� ������
+                256,           
+                nullptr,         
+                nullptr         
             );
 
             if (paErr != paNoError) {
@@ -137,7 +129,6 @@ class AudioPlayer {
                 return;
             }
 
-            // 4. ��������� �����
             paErr = Pa_StartStream(stream);
             if (paErr != paNoError) {
                 std::cerr << "PortAudio start error: " << Pa_GetErrorText(paErr) << std::endl;
@@ -147,15 +138,13 @@ class AudioPlayer {
                 return;
             }
 
-            // 5. ������ � ������������� ������
             constexpr int bufferSize = 1024;
-            float buffer[bufferSize * sfinfo.channels];  // ��������� ���������� �������!
+            float buffer[bufferSize * sfinfo.channels]; 
 
             while (true) {
                 sf_count_t framesRead = sf_readf_float(file, buffer, bufferSize);
-                if (framesRead <= 0) break;  // ����� ����� ��� ������
+                if (framesRead <= 0) break;
 
-                // ���������� ������ � ����� (������� ���������� ������, � �� ����!)
                 paErr = Pa_WriteStream(stream, buffer, framesRead);
                 if (paErr != paNoError) {
                     std::cerr << "PortAudio write error: " << Pa_GetErrorText(paErr) << std::endl;
@@ -163,16 +152,12 @@ class AudioPlayer {
                 }
             }
 
-            // 6. ������������� � ��������� ��
             Pa_StopStream(stream);
             Pa_CloseStream(stream);
             sf_close(file);
         }
     };
     
-
-
-
 void processData(const std::vector<float>& data);
 
 struct AudioData {
@@ -246,7 +231,6 @@ static int audioCallback(const void* inputBuffer, void* outputBuffer,
     (void)outputBuffer;
 
     for (unsigned long i = 0; i < framesPerBuffer; ++i) {
-        //std::cout << samples[i] << std::endl;
         float sample = static_cast<float>(samples[i]) / 32768.0f;
         data->buffer.push_back(sample);
 
@@ -284,31 +268,6 @@ PaDeviceIndex selectInputDevice() {
     }
 
     PaDeviceIndex selectedDevice;
-    /*
-    while (true) {
-        std::cout << "Select input device (0-" << numDevices - 1 << "): ";
-        std::cin >> selectedDevice;
-
-        if (std::cin.fail()) {
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            std::cout << "Invalid input. Please enter a number." << std::endl;
-            continue;
-        }
-
-        if (selectedDevice < 0 || selectedDevice >= numDevices) {
-            std::cout << "Device index out of range. Try again." << std::endl;
-            continue;
-        }
-
-        deviceInfo = Pa_GetDeviceInfo(selectedDevice);
-        if (deviceInfo->maxInputChannels < 1) {
-            std::cout << "Selected device has no input channels. Try again." << std::endl;
-            continue;
-        }
-
-        break;
-    }*/
 
     selectedDevice = 1;
 
@@ -471,7 +430,6 @@ void processData(const std::vector<float>& data) {
 
     if (audioPlayer->trackQueue.size() != 0 || audioPlayer->isPlaying)
     {
-        //std::cout << "queue size = " << audioPlayer->trackQueue.size() << std::endl;
         return;
     }
 
@@ -514,11 +472,7 @@ void processData(const std::vector<float>& data) {
 
     int n_mfcc = 13;
     int num_frames = T_FIXED;
-    //-509.902;3.32611e-05;-3.51126e-05;-2.25488e-05;-7.8028e-06;1.38202e-05;4.75442e-05;-1.78539e-06;-5.57437e-05;-4.80071e-05;7.07542e-06;-5.07843e-05;-7.4325e-05
 
-    //-5.07843e-05;-7.4325e-05
-
-    
     static std::array<float, 13> silence = {
         -509.902, 3.32611e-05, -3.51126e-05, -2.25488e-05
     , -7.8028e-06, 1.38202e-05, 4.75442e-05
@@ -543,20 +497,6 @@ void processData(const std::vector<float>& data) {
         itr++;
     }
 
-    /*
-
-    std::ofstream fx("testoutput.csv");
-
-    for (size_t i = 0; i < T_FIXED; i++)
-    {
-        for (int j = 0; j < 13; j++)
-        {
-            fx << *(flat_mfcc.begin() + (i*13) + j) << ";";
-        }
-        fx << std::endl;
-    }
-
-    fx.close();*/
 
     torch::Tensor input_tensor = torch::from_blob(flat_mfcc.data(), { num_frames, n_mfcc }, torch::kFloat);
 
@@ -568,24 +508,6 @@ void processData(const std::vector<float>& data) {
 
     input_tensor = input_tensor.to(device);
 
-    /*
-    std::string model_path = "/home/mephi/newmodel_pi_5classes_tf_mega_noaug200.pt";
-
-    try {
-        torch::load(model, model_path);
-        model->eval();
-        std::cout << "Model loaded successfully using torch::load from: " << model_path << std::endl;
-    }
-    catch (const c10::Error& e) {
-        std::cerr << "Error loading the model with torch::load:\n" << e.what() << std::endl;
-        return ;
-    }
-    catch (const std::exception& e) {
-        std::cerr << "Error loading the model with torch::load:\n" << e.what() << std::endl;
-        return ;
-    }
-
-    model->to(device);*/
 
     torch::Tensor output_tensor;
     try {
@@ -627,68 +549,18 @@ void processData(const std::vector<float>& data) {
 
         if (predicted_idx == 1)
         {
-            //threadIsRunning = true;
-            //audioPlayer->enqueue("/home/mephi/Media/351556__richerlandtv__connect3.wav");
             audioPlayer->enqueue("/home/mephi/Media/reply_jarvis.wav");
-            //audioThread = std::thread(playOggFile, "/home/mephi/Media/reply_jarvis.ogg");
         }
         else if (predicted_idx == 2)
         {
-            //threadIsRunning = true;
-            //audioThread = std::thread(playOggFile, "/home/mephi/Media/build_reply.ogg");
-            //audioPlayer->enqueue("/home/mephi/Media/351556__richerlandtv__connect3.wav");
             audioPlayer->enqueue("/home/mephi/Media/build_reply.wav");
         }
         else if (predicted_idx == 4)
         {
-            //threadIsRunning = true;
-            //audioThread = std::thread(playOggFile, "/home/mephi/Media/reply_wakeup.ogg");
-            //audioPlayer->enqueue("/home/mephi/Media/351556__richerlandtv__connect3.wav");
             audioPlayer->enqueue("/home/mephi/Media/reply_wakeup.wav");
         }
 
 
     }
-
-/*
-    if (probabilities[0][0].item<float>() < 0.1)
-    {
-        std::cout << "Oy vey!" << std::endl;
-
-        PaError err;
-
-        err = Pa_StopStream(stream);
-        if (err != paNoError) {
-            std::cerr << "PortAudio error xx: " << Pa_GetErrorText(err) << std::endl;
-        }
-
-        Pa_CloseStream(stream);
-        
-        PaDeviceIndex inputDevice = selectInputDevice();
-
-        PaStreamParameters inputParameters;
-        inputParameters.device = inputDevice;
-        inputParameters.channelCount = 1; 
-        inputParameters.sampleFormat = paInt16; 
-        inputParameters.suggestedLatency =
-            Pa_GetDeviceInfo(inputParameters.device)->defaultLowInputLatency;
-        inputParameters.hostApiSpecificStreamInfo = nullptr;
-
-
-        err = Pa_OpenStream(&stream,
-            &inputParameters,
-            nullptr,   
-            16000,      
-            160,      
-            paClipOff, 
-            audioCallback,
-            &audioData);
-
-            if (err != paNoError) {
-                std::cerr << "PortAudio error x2: " << Pa_GetErrorText(err) << std::endl;
-            }
-
-
-    }*/
 
 }
