@@ -65,6 +65,7 @@ class AudioPlayer {
             }
         }
     
+
         std::queue<std::string> trackQueue;  
         std::mutex queueMutex;  
         std::condition_variable queueCond;  
@@ -533,11 +534,10 @@ void processData(const std::vector<float>& data) {
 
     float confidence = probabilities[0][predicted_idx].item<float>();
 
-    const float THRESHOLD = 0.4f;
     std::cout << "-Probabilities: " << probabilities << std::endl;
-
-        
-    if (predicted_idx != 0 && predicted_idx !=3 && (predicted_idx == 2 && confidence >= 0.6 || predicted_idx == 4 && confidence >= THRESHOLD || (predicted_idx == 1 && confidence >= 0.3)))
+      
+    //if (predicted_idx != 0 && predicted_idx !=3 && (predicted_idx == 2 && confidence >= 0.6 || predicted_idx == 4 && confidence >= 0.4 || (predicted_idx == 1 && confidence >= 0.3)))
+    if (predicted_idx != 0 && predicted_idx !=3 && (predicted_idx == 2 && confidence >= 0.6 || predicted_idx == 4 && confidence >= 0.6 || (predicted_idx == 1 && confidence >= 0.5)))
     {
         std::cout << "--- Inference Results ---" << std::endl;
         std::cout << "Raw model output (log probabilities): " << output_tensor << std::endl;
