@@ -403,10 +403,15 @@ int main() {
     int count = 0;
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
+
         count ++;
 
         if (count > 4)
         {
+            if (audioPlayer->trackQueue.size() != 0 || audioPlayer->isPlaying)
+            {
+                continue;
+            }
             std::cout << "Restarting stream..." << std::endl;
             count = 0;
         
